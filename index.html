@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0d0c" />
+    <meta name="description" content="Explore Indonesia administrative boundaries on an interactive globe and map." />
+    <title>Batas Administrasi Indonesia</title>
+  </head>
+  <body>
+    <main class="shell">
+<section class="globe-hero" id="globe-intro" aria-label="Batas administrasi globe">
+        <h1 class="hero-title">BATAS ADMINISTRASI</h1>
+        <div class="intro-globe">
+          <div class="globe-orbit orbit-one"></div>
+          <div class="globe-orbit orbit-two"></div>
+          <canvas id="cobe-globe" aria-label="Globe showing countries around the world and Indonesia"></canvas>
+          <span class="globe-pin"></span>
+          <span class="globe-pin-label">INDONESIA</span>
+        </div>
+        <span id="intro-status" class="visually-hidden" aria-live="polite">ROTATING · PLANET EARTH</span>
+        <div class="intro-bottom"><span id="intro-phase">ROTATING · PLANET EARTH</span><span class="intro-progress"><i></i></span><button id="intro-skip" type="button">SKIP INTRO ↗</button></div>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <div class="eyebrow">VIEW</div>
+          <h1>Indonesia,<br><span>in detail.</span></h1>
+          <p class="intro">Explore the archipelago through administrative boundaries, from the national picture down to the local edge.</p>
+          <div class="rule"></div>
+          <div class="section-label">MAP LAYERS <span>01</span></div>
+          <label class="layer-row"><span class="layer-icon">⌗</span><span class="layer-copy"><b>Administrative areas</b><small>Indonesia · PMTiles</small></span><input id="layer-toggle" type="checkbox" checked><span class="switch"></span></label>
+          <div class="rule"></div>
+          <div class="section-label">MAP APPEARANCE</div>
+          <div class="segmented" role="group" aria-label="Map appearance"><button class="active" data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+          <div class="rule"></div>
+          <div class="section-label">ABOUT THIS DATA</div>
+          <div class="data-card"><span class="data-symbol">◎</span><div><b>Indonesia admin</b><small>Vector tile archive</small></div><span class="data-status">●</span></div>
+          <div class="source-note"><span class="source-line"></span><span>Tiles load directly from your public storage URL. Click an area on the map to inspect its available attributes.</span></div>
+          <div class="sidebar-bottom"><span class="coordinate-icon">⌖</span><span>WGS 84 <i>·</i> EPSG:4326</span><span class="sidebar-version">VIEWER 01.0</span></div>
+        </aside>
+
+        <section class="map-panel" aria-label="Indonesia map viewer">
+          <div id="map"></div>
+          <div class="map-caption"><span class="caption-line"></span><span>BATAS ADMINISTRASI INDONESIA</span><span class="caption-coords">5° 00′ S&nbsp;&nbsp; 120° 00′ E</span></div>
+          <div class="zoom-control" aria-label="Map zoom controls"><button id="zoom-in" aria-label="Zoom in">+</button><span></span><button id="zoom-out" aria-label="Zoom out">−</button></div>
+          <button class="locate-control" id="reset-view" aria-label="Reset map view" title="Reset map view">⌖</button>
+          <div class="map-attribution">© MapLibre · Imagery © Esri</div>
+          <div class="map-toast" id="map-status"><span class="toast-dot"></span><span id="status-text">CONNECTING TO TILE ARCHIVE</span></div>
+          <div class="feature-card" id="feature-card" hidden><button class="feature-close" id="feature-close" aria-label="Close feature details">×</button><span class="eyebrow">SELECTED FEATURE</span><h2 id="feature-title">Map feature</h2><div class="feature-properties" id="feature-properties"></div></div>
+        </section>
+      </section>
+</main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+
+
