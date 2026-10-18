@@ -74,7 +74,7 @@ body.intro-playing{overflow:hidden}.globe-hero{position:fixed;inset:0;z-index:20
 .globe-hero:before{display:none}
 
 /* Scale the opening globe up while preserving the low half-sphere crop. */
-.globe-hero .intro-globe{top:15vh;width:min(150vh,130vw,1500px);height:min(150vh,130vw,1500px)}
+.globe-hero .intro-globe{top:10vh;width:min(150vh,130vw,1500px);height:min(150vh,130vw,1500px)}
 .globe-hero .intro-globe canvas{max-width:none}
 @media(max-width:760px){.globe-hero .intro-globe{top:23vh;width:min(170vw,125vh,1250px);height:min(170vw,125vh,1250px)}}
 
