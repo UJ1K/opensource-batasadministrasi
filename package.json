@@ -9,9 +9,14 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@mapbox/shp-write": "^0.4.3",
+    "@mapbox/vector-tile": "^3.0.0",
+    "cobe": "^2.0.1",
+    "fflate": "^0.8.3",
     "maplibre-gl": "^5.6.1",
+    "pbf": "^5.1.2",
     "pmtiles": "^4.3.0",
-    "cobe": "^2.0.1"
+    "polygon-clipping": "^0.15.7"
   },
   "devDependencies": {
     "vite": "^7.0.0"

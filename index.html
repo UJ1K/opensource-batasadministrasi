@@ -29,7 +29,7 @@
           <p class="intro">Batas Administrasi Indonesia untuk kebutuhan analisis geografis.</p>
           <div class="rule"></div>
           <div class="section-label">MAP LAYERS <span>01</span></div>
-          <label class="layer-row"><span class="layer-icon">⌗</span><span class="layer-copy"><b>Administrative areas</b><small>Indonesia · PMTiles</small></span><input id="layer-toggle" type="checkbox" checked><span class="switch"></span></label>
+          <label class="layer-row"><span class="layer-icon">⌗</span><span class="layer-copy"><b>Batas Provinsi</b><small>Satu Indonesia</small></span><input id="layer-toggle" type="checkbox" checked><span class="switch"></span></label>
           <div class="rule"></div>
           <div class="section-label">MAP APPEARANCE</div>
           <div class="segmented" role="group" aria-label="Map appearance"><button class="active" data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
@@ -37,6 +37,15 @@
           <div class="section-label">DATA SOURCE</div>
           <div class="data-card"><span class="data-symbol">◎</span><div><b>Indonesia admin</b><small>Vector tile archive</small></div><span class="data-status">●</span></div>
           <div class="source-note"><span class="source-line"></span><span>Tiles load directly from your public storage URL. Click an area on the map to inspect its available attributes.</span></div>
+          <section class="export-tool" aria-labelledby="export-title">
+            <div class="section-label" id="export-title">EXPORT PROVINCES</div>
+            <label class="export-layer-label" for="export-layer">Province data layer</label>
+            <select id="export-layer" disabled><option>Loading archive layers…</option></select>
+            <button class="export-button" id="export-provinces" type="button" disabled>Download Shapefile ZIP</button>
+            <button class="export-cancel" id="cancel-export" type="button" hidden>Cancel export</button>
+            <progress id="export-progress" max="1" value="0" hidden></progress>
+            <p id="export-status" aria-live="polite">Waiting for PMTiles archive…</p>
+          </section>
           <div class="sidebar-bottom"><span class="coordinate-icon">⌖</span><span>WGS 84 <i>·</i> EPSG:4326</span><span class="sidebar-version">VIEWER 01.0</span></div>
         </aside>
 

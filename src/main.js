@@ -127,20 +127,43 @@ const mapResizeObserver = new ResizeObserver(() => map.resize());
 mapResizeObserver.observe(map.getContainer());
 
 const statusText = document.querySelector("#status-text");
+const exportLayerSelect = document.querySelector("#export-layer");
+const exportButton = document.querySelector("#export-provinces");
+const cancelExportButton = document.querySelector("#cancel-export");
+const exportProgress = document.querySelector("#export-progress");
+const exportStatus = document.querySelector("#export-status");
 const featureCard = document.querySelector("#feature-card");
 const themeButtons = [...document.querySelectorAll("[data-theme]")];
 let featureLayers = [];
 let latestFeature = null;
 let theme = "light";
+let pmtilesArchive;
+let exportAbortController;
 
 function showStatus(text) { statusText.textContent = text; }
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 map.on("load", async () => {
   try {
-    const archive = protocol.get(tileUrl);
-    const [header, metadata] = await Promise.all([archive.getHeader(), archive.getMetadata()]);
+    pmtilesArchive = protocol.get(tileUrl);
+    const [header, metadata] = await Promise.all([pmtilesArchive.getHeader(), pmtilesArchive.getMetadata()]);
     const layers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers : [];
+
+    exportLayerSelect.replaceChildren();
+    for (const layer of layers) {
+      const option = document.createElement("option");
+      option.value = layer.id;
+      option.textContent = layer.id;
+      exportLayerSelect.append(option);
+    }
+    const provinceLayer = layers.find((layer) =>
+      /province|provinsi/i.test(layer.id) ||
+      Object.keys(layer.fields || {}).some((field) => /^(province|provinsi|province_name|nama_provinsi|name_1)$/i.test(field))
+    );
+    if (provinceLayer) exportLayerSelect.value = provinceLayer.id;
+    exportLayerSelect.disabled = layers.length === 0;
+    exportButton.disabled = layers.length === 0;
+    exportStatus.textContent = layers.length ? "Select the province layer, then create the ZIP." : "No vector layers are available to export.";
 
     for (const layer of layers) {
       const sourceLayer = layer.id || layer.name;
@@ -177,8 +200,54 @@ map.on("load", async () => {
   } catch (error) {
     console.error("Unable to load PMTiles archive:", error);
     showStatus("ARCHIVE UNAVAILABLE · CHECK URL, RANGE ACCESS & CORS");
+    exportStatus.textContent = "Archive unavailable. Check the PMTiles URL and storage access.";
   }
 });
+
+exportButton.addEventListener("click", async () => {
+  if (!pmtilesArchive || !exportLayerSelect.value) return;
+  exportAbortController = new AbortController();
+  exportButton.disabled = true;
+  exportLayerSelect.disabled = true;
+  cancelExportButton.hidden = false;
+  exportProgress.hidden = false;
+  exportProgress.value = 0;
+  exportProgress.max = 1;
+  try {
+    const { createProvinceShapefile } = await import("./province-export.js");
+    const result = await createProvinceShapefile(pmtilesArchive, exportLayerSelect.value, {
+      signal: exportAbortController.signal,
+      onProgress: ({ stage, completed, total, count }) => {
+        exportStatus.textContent = count
+          ? `Preparing ${count} polygon records…`
+          : `${stage} · ${completed} of ${total}`;
+        exportProgress.max = Math.max(total, 1);
+        exportProgress.value = completed;
+      }
+    });
+    const objectUrl = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "indonesia_provinces.zip";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    exportStatus.textContent = `Downloaded ${result.count} province polygons as a ZIP (Shapefile, WGS 84).`;
+  } catch (error) {
+    if (error.name === "AbortError") exportStatus.textContent = "Export cancelled.";
+    else {
+      console.error("Unable to export province Shapefile:", error);
+      exportStatus.textContent = error.message || "Export failed. Check the archive layer and storage access.";
+    }
+  } finally {
+    exportAbortController = undefined;
+    exportButton.disabled = false;
+    exportLayerSelect.disabled = false;
+    cancelExportButton.hidden = true;
+    exportProgress.hidden = true;
+  }
+});
+
+cancelExportButton.addEventListener("click", () => exportAbortController?.abort());
 
 map.on("error", (event) => {
   if (event?.sourceId === "admin") showStatus("TILE REQUEST FAILED · CHECK STORAGE URL");
