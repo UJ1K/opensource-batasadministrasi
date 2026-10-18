@@ -123,6 +123,9 @@ const map = new maplibregl.Map({
   }
 });
 
+const mapResizeObserver = new ResizeObserver(() => map.resize());
+mapResizeObserver.observe(map.getContainer());
+
 const statusText = document.querySelector("#status-text");
 const featureCard = document.querySelector("#feature-card");
 const themeButtons = [...document.querySelectorAll("[data-theme]")];
@@ -226,7 +229,6 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
   }
 }));
 
-map.on("idle", () => map.resize());
 
 
 

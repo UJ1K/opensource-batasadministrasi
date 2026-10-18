@@ -77,3 +77,42 @@ body.intro-playing{overflow:hidden}.globe-hero{position:fixed;inset:0;z-index:20
 .globe-hero .intro-globe{top:15vh;width:min(150vh,130vw,1500px);height:min(150vh,130vw,1500px)}
 .globe-hero .intro-globe canvas{max-width:none}
 @media(max-width:760px){.globe-hero .intro-globe{top:23vh;width:min(170vw,125vh,1250px);height:min(170vw,125vh,1250px)}}
+
+/* Mobile and tablet layout: readable controls above a tall, touch-friendly map. */
+@media(max-width:900px){
+  body{min-width:0;overflow-x:hidden}
+  .workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;gap:12px;padding:14px;min-height:0}
+  .sidebar{display:flex;flex-direction:column;align-items:stretch;min-width:0;padding:4px 2px 0}
+  .sidebar .eyebrow{font-size:9px}
+  .sidebar h1{font-size:clamp(27px,7vw,36px);line-height:1.06;margin:10px 0}
+  .sidebar .intro{max-width:46rem;margin:0 0 12px;line-height:1.55}
+  .sidebar .rule{display:none}
+  .sidebar .section-label{margin:10px 0 5px}
+  .layer-row{min-height:46px;padding:5px 0 8px}
+  .segmented{width:100%;margin:3px 0 10px}
+  .segmented button{min-height:42px}
+  .data-card{display:flex;margin-top:3px}
+  .source-note{display:flex;margin:9px 2px 0}
+  .sidebar-bottom{flex-wrap:wrap;gap:4px;margin-top:10px;padding-top:10px;border-top:1px solid #ffffff20}
+  .map-panel{width:100%;height:min(68svh,680px);min-height:390px}
+  .map-caption{top:12px;left:12px;gap:6px;font-size:8px}
+  .caption-coords{display:none}
+  .zoom-control{top:12px;right:12px}
+  .zoom-control button,.locate-control{width:44px;height:44px;min-width:44px;min-height:44px}
+  .locate-control{top:112px;right:12px}
+  .map-toast{left:10px;bottom:38px;max-width:calc(100% - 100px);padding:8px;font-size:7px;line-height:1.4}
+  .map-attribution{right:7px;bottom:7px;font-size:7px}
+  .feature-card{right:12px;bottom:58px;width:calc(100% - 24px);max-height:55svh}
+  .globe-hero .intro-bottom{left:12px;right:12px;gap:7px}
+  .globe-hero .intro-bottom>span:first-child{min-width:0;white-space:nowrap;font-size:7px}
+  .globe-hero .intro-progress{width:clamp(36px,18vw,100px);flex:none}
+  .globe-hero .intro-bottom button{white-space:nowrap;font-size:7px}
+  .hero-title{width:calc(100% - 28px);max-width:none;font-size:clamp(27px,8.5vw,60px)}
+}
+@media(max-width:380px){
+  .workspace{padding:10px;gap:10px}
+  .globe-hero .intro-bottom{gap:5px}
+  .globe-hero .intro-bottom>span:first-child,.globe-hero .intro-bottom button{font-size:6px;letter-spacing:.08em}
+  .globe-hero .intro-progress{width:38px}
+  .map-toast{max-width:calc(100% - 90px)}
+}
