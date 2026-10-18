@@ -1,6 +1,5 @@
-<<<<<<< HEAD
+
 # opensource-batasadministrasi
-=======
 # Batas Administrasi Indonesia
 
 An interactive Indonesia administrative-boundary viewer. It opens with an animated globe, then displays a zoomable map with administrative vector tiles from a PMTiles archive.
