@@ -126,9 +126,7 @@ const map = new maplibregl.Map({
 const mapResizeObserver = new ResizeObserver(() => map.resize());
 mapResizeObserver.observe(map.getContainer());
 
-const statusText = document.querySelector("#status-text");
-const exportLayerSelect = document.querySelector("#export-layer");
-const exportButton = document.querySelector("#export-provinces");
+const exportButton = document.querySelector("#export-selected");
 const cancelExportButton = document.querySelector("#cancel-export");
 const exportProgress = document.querySelector("#export-progress");
 const exportStatus = document.querySelector("#export-status");
@@ -140,7 +138,6 @@ let theme = "light";
 let pmtilesArchive;
 let exportAbortController;
 
-function showStatus(text) { statusText.textContent = text; }
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 map.on("load", async () => {
@@ -148,22 +145,6 @@ map.on("load", async () => {
     pmtilesArchive = protocol.get(tileUrl);
     const [header, metadata] = await Promise.all([pmtilesArchive.getHeader(), pmtilesArchive.getMetadata()]);
     const layers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers : [];
-
-    exportLayerSelect.replaceChildren();
-    for (const layer of layers) {
-      const option = document.createElement("option");
-      option.value = layer.id;
-      option.textContent = layer.id;
-      exportLayerSelect.append(option);
-    }
-    const provinceLayer = layers.find((layer) =>
-      /province|provinsi/i.test(layer.id) ||
-      Object.keys(layer.fields || {}).some((field) => /^(province|provinsi|province_name|nama_provinsi|name_1)$/i.test(field))
-    );
-    if (provinceLayer) exportLayerSelect.value = provinceLayer.id;
-    exportLayerSelect.disabled = layers.length === 0;
-    exportButton.disabled = layers.length === 0;
-    exportStatus.textContent = layers.length ? "Select the province layer, then create the ZIP." : "No vector layers are available to export.";
 
     for (const layer of layers) {
       const sourceLayer = layer.id || layer.name;
@@ -195,27 +176,25 @@ map.on("load", async () => {
       map.fitBounds([[header.minLon, header.minLat], [header.maxLon, header.maxLat]], { padding: 36, maxZoom: 4.5, duration: 0 });
     }
 
-    if (!featureLayers.length) showStatus("ARCHIVE OPEN · NO VECTOR LAYERS FOUND");
-    else showStatus(`ARCHIVE READY · ${layers.length} VECTOR LAYER${layers.length === 1 ? "" : "S"}`);
   } catch (error) {
     console.error("Unable to load PMTiles archive:", error);
-    showStatus("ARCHIVE UNAVAILABLE · CHECK URL, RANGE ACCESS & CORS");
     exportStatus.textContent = "Archive unavailable. Check the PMTiles URL and storage access.";
   }
 });
 
 exportButton.addEventListener("click", async () => {
-  if (!pmtilesArchive || !exportLayerSelect.value) return;
+  if (!pmtilesArchive || !latestFeature) return;
   exportAbortController = new AbortController();
   exportButton.disabled = true;
-  exportLayerSelect.disabled = true;
   cancelExportButton.hidden = false;
   exportProgress.hidden = false;
   exportProgress.value = 0;
   exportProgress.max = 1;
   try {
     const { createProvinceShapefile } = await import("./province-export.js");
-    const result = await createProvinceShapefile(pmtilesArchive, exportLayerSelect.value, {
+    const sourceLayer = latestFeature.sourceLayer || latestFeature.layer?.['source-layer'];
+    if (!sourceLayer) throw new Error("Could not identify the selected feature's source layer.");
+    const result = await createProvinceShapefile(pmtilesArchive, sourceLayer, latestFeature, {
       signal: exportAbortController.signal,
       onProgress: ({ stage, completed, total, count }) => {
         exportStatus.textContent = count
@@ -228,10 +207,10 @@ exportButton.addEventListener("click", async () => {
     const objectUrl = URL.createObjectURL(result.blob);
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = "indonesia_provinces.zip";
+    link.download = `${result.fileName}.zip`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-    exportStatus.textContent = `Downloaded ${result.count} province polygons as a ZIP (Shapefile, WGS 84).`;
+    exportStatus.textContent = `Downloaded ${result.name} as a Shapefile ZIP (WGS 84).`;
   } catch (error) {
     if (error.name === "AbortError") exportStatus.textContent = "Export cancelled.";
     else {
@@ -240,8 +219,7 @@ exportButton.addEventListener("click", async () => {
     }
   } finally {
     exportAbortController = undefined;
-    exportButton.disabled = false;
-    exportLayerSelect.disabled = false;
+    exportButton.disabled = !latestFeature;
     cancelExportButton.hidden = true;
     exportProgress.hidden = true;
   }
@@ -250,14 +228,16 @@ exportButton.addEventListener("click", async () => {
 cancelExportButton.addEventListener("click", () => exportAbortController?.abort());
 
 map.on("error", (event) => {
-  if (event?.sourceId === "admin") showStatus("TILE REQUEST FAILED · CHECK STORAGE URL");
+  if (event?.sourceId === "admin") console.error("Admin tile request failed:", event.error || event);
 });
 
 map.on("click", (event) => {
   if (!featureLayers.length) return;
   const feature = map.queryRenderedFeatures(event.point, { layers: featureLayers.filter((id) => map.getLayer(id) && !id.endsWith("-line")) })[0];
-  if (!feature) { featureCard.hidden = true; return; }
+  if (!feature) { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; return; }
   latestFeature = feature;
+  exportButton.disabled = false;
+  exportStatus.textContent = "";
   const props = feature.properties || {};
   const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
   const title = props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
@@ -283,7 +263,7 @@ document.querySelector("#layer-toggle").addEventListener("change", (event) => {
 document.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
 document.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
 document.querySelector("#reset-view").addEventListener("click", () => map.flyTo({ center: [118, -2.2], zoom: 2.5, duration: 900 }));
-document.querySelector("#feature-close").addEventListener("click", () => { featureCard.hidden = true; latestFeature = null; });
+document.querySelector("#feature-close").addEventListener("click", () => { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; });
 
 themeButtons.forEach((button) => button.addEventListener("click", () => {
   theme = button.dataset.theme;

@@ -37,26 +37,14 @@
           <div class="section-label">DATA SOURCE</div>
           <div class="data-card"><span class="data-symbol">◎</span><div><b>Indonesia admin</b><small>Vector tile archive</small></div><span class="data-status">●</span></div>
           <div class="source-note"><span class="source-line"></span><span>Tiles load directly from your public storage URL. Click an area on the map to inspect its available attributes.</span></div>
-          <section class="export-tool" aria-labelledby="export-title">
-            <div class="section-label" id="export-title">EXPORT PROVINCES</div>
-            <label class="export-layer-label" for="export-layer">Province data layer</label>
-            <select id="export-layer" disabled><option>Loading archive layers…</option></select>
-            <button class="export-button" id="export-provinces" type="button" disabled>Download Shapefile ZIP</button>
-            <button class="export-cancel" id="cancel-export" type="button" hidden>Cancel export</button>
-            <progress id="export-progress" max="1" value="0" hidden></progress>
-            <p id="export-status" aria-live="polite">Waiting for PMTiles archive…</p>
-          </section>
-          <div class="sidebar-bottom"><span class="coordinate-icon">⌖</span><span>WGS 84 <i>·</i> EPSG:4326</span><span class="sidebar-version">VIEWER 01.0</span></div>
         </aside>
 
         <section class="map-panel" aria-label="Indonesia map viewer">
           <div id="map"></div>
-          <div class="map-caption"><span class="caption-line"></span><span>BATAS ADMINISTRASI INDONESIA</span><span class="caption-coords">5° 00′ S&nbsp;&nbsp; 120° 00′ E</span></div>
           <div class="zoom-control" aria-label="Map zoom controls"><button id="zoom-in" aria-label="Zoom in">+</button><span></span><button id="zoom-out" aria-label="Zoom out">−</button></div>
           <button class="locate-control" id="reset-view" aria-label="Reset map view" title="Reset map view">⌖</button>
           <div class="map-attribution">© MapLibre · Imagery © Esri</div>
-          <div class="map-toast" id="map-status"><span class="toast-dot"></span><span id="status-text">CONNECTING TO TILE ARCHIVE</span></div>
-          <div class="feature-card" id="feature-card" hidden><button class="feature-close" id="feature-close" aria-label="Close feature details">×</button><span class="eyebrow">SELECTED FEATURE</span><h2 id="feature-title">Map feature</h2><div class="feature-properties" id="feature-properties"></div></div>
+          <div class="feature-card" id="feature-card" hidden><button class="feature-close" id="feature-close" aria-label="Close feature details">×</button><span class="eyebrow">SELECTED FEATURE</span><h2 id="feature-title">Map feature</h2><div class="feature-properties" id="feature-properties"></div><button class="export-button feature-export" id="export-selected" type="button" disabled>Download selected area</button><button class="export-cancel" id="cancel-export" type="button" hidden>Cancel export</button><progress id="export-progress" max="1" value="0" hidden></progress><p class="feature-export-status" id="export-status" aria-live="polite"></p></div>
         </section>
       </section>
 </main>

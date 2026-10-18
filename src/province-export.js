@@ -5,8 +5,8 @@ const PROVINCE_NAME_FIELDS = [
   "namaprov", "prov_name", "name_1", "nama_prov", "wadmpr", "prov", "name"
 ];
 
-export async function createProvinceShapefile(archive, layerId, { signal, onProgress } = {}) {
-  const [{ VectorTile }, { default: Pbf }, { union }, { default: shpwrite }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
+export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
+  const [{ VectorTile }, { PbfReader }, { union }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
     import("polygon-clipping"),
@@ -52,6 +52,7 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
   }
 
   const nameField = findProvinceNameField(sourceLayer.fields || {});
+  const selectedProperties = selectedFeature?.properties || {};
   const groups = new Map();
   let completed = 0;
   onProgress?.({ stage: "Reading tiles", completed, total: tiles.length });
@@ -63,7 +64,7 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
       const tile = tiles[nextIndex++];
       const response = await archive.getZxy(zoom, tile.x, tile.y, signal);
       if (response?.data) {
-        const vectorTile = new VectorTile(new Pbf(response.data));
+        const vectorTile = new VectorTile(new PbfReader(response.data));
         const layer = vectorTile.layers[layerId];
         if (layer) {
           for (let index = 0; index < layer.length; index += 1) {
@@ -71,6 +72,7 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
             if (vectorFeature.type !== 3) continue;
             const feature = vectorFeature.toGeoJSON(tile.x, tile.y, zoom);
             if (!feature.geometry || !["Polygon", "MultiPolygon"].includes(feature.geometry.type)) continue;
+            if (!matchesSelectedFeature(feature, selectedFeature)) continue;
             const key = provinceGroupKey(feature, nameField);
             let group = groups.get(key);
             if (!group) {
@@ -88,7 +90,7 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
     }
   }
   await Promise.all(Array.from({ length: Math.min(4, tiles.length) }, () => readTiles()));
-  if (!groups.size) throw new Error(`No polygon features were found in layer “${layerId}”.`);
+  if (!groups.size) throw new Error("No matching polygon tiles were found for the selected area.");
 
   const features = [];
   let merged = 0;
@@ -108,7 +110,7 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
     features: features.map((feature) => ({ ...feature, properties: properties(feature.properties) }))
   };
   onProgress?.({ stage: "Creating Shapefile ZIP", completed: 0, total: 1 });
-  const shpZip = await shpwrite.zip(collection, {
+  const shpZip = await writeShapefileZip(collection, {
     folder: "indonesia_provinces",
     outputType: "uint8array",
     compression: "STORE",
@@ -120,8 +122,23 @@ export async function createProvinceShapefile(archive, layerId, { signal, onProg
   if (!shpPath) throw new Error("The Shapefile writer did not create a .shp file.");
   files[shpPath.replace(/\.shp$/i, ".cpg")] = strToU8("UTF-8\n");
   const zipBytes = zipSync(files, { level: 0 });
+  const name = getFeatureName(selectedFeature?.properties || features[0].properties);
+  const fileName = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area";
   onProgress?.({ stage: "Ready", completed: 1, total: 1, count: features.length });
-  return { blob: new Blob([zipBytes], { type: "application/zip" }), count: features.length, zoom };
+  return { blob: new Blob([zipBytes], { type: "application/zip" }), count: features.length, zoom, name, fileName };
+}
+
+function matchesSelectedFeature(candidate, selected) {
+  if (!selected) return false;
+  const target = selected.properties || {};
+  const entries = Object.entries(target).filter(([, value]) => value != null && ["string", "number", "boolean"].includes(typeof value));
+  if (!entries.length && selected.id != null) return String(candidate.id) === String(selected.id);
+  return entries.length > 0 && entries.every(([key, value]) => String(candidate.properties?.[key] ?? "") === String(value));
+}
+
+function getFeatureName(properties) {
+  const entry = Object.entries(properties).find(([key, value]) => /^(name|name_1|nama|nama_prov|namobj|shapeName|admin)$/i.test(key) && value != null && String(value).trim());
+  return entry ? String(entry[1]).trim() : "selected_area";
 }
 
 function findProvinceNameField(fields) {
