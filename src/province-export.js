@@ -6,10 +6,9 @@ const PROVINCE_NAME_FIELDS = [
 ];
 
 export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
-  const [{ VectorTile }, { PbfReader }, { union }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
+  const [{ VectorTile }, { PbfReader }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
-    import("polygon-clipping"),
     import("@mapbox/shp-write"),
     import("fflate")
   ]);
@@ -52,7 +51,6 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   }
 
   const nameField = findProvinceNameField(sourceLayer.fields || {});
-  const selectedProperties = selectedFeature?.properties || {};
   const groups = new Map();
   let completed = 0;
   onProgress?.({ stage: "Reading tiles", completed, total: tiles.length });
@@ -93,14 +91,10 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   if (!groups.size) throw new Error("No matching polygon tiles were found for the selected area.");
 
   const features = [];
-  let merged = 0;
   for (const group of groups.values()) {
     if (signal?.aborted) throw new DOMException("Export cancelled.", "AbortError");
-    const polygons = union(...group.geometries);
+    const polygons = group.geometries.flatMap((geometry) => geometry);
     if (polygons.length) features.push({ type: "Feature", geometry: { type: "MultiPolygon", coordinates: polygons }, properties: group.properties });
-    merged += 1;
-    onProgress?.({ stage: "Merging province polygons", completed: merged, total: groups.size });
-    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   if (!features.length) throw new Error("No province polygons could be assembled from the selected layer.");
 
