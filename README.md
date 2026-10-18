@@ -79,5 +79,4 @@ The map and browser must be able to reach the archive directly. For a locally ho
 - MapLibre GL JS
 - PMTiles
 - COBE
-
->>>>>>> master
+- master
