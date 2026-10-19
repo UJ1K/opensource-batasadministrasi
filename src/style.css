@@ -125,3 +125,4 @@ body.intro-playing{overflow:hidden}.globe-hero{position:fixed;inset:0;z-index:20
 .feature-card progress{display:block;width:100%;height:4px;margin-top:11px;accent-color:#a9c895}
 .feature-card .feature-export-status{margin:9px 0 0;color:#a3b4a9;font-size:10px;line-height:1.5}
 @media(max-width:900px){.feature-card .export-button,.feature-card .export-cancel{min-height:44px}}
+.layer-row input:disabled~.switch{opacity:.35}.layer-row:has(input:disabled){cursor:not-allowed}

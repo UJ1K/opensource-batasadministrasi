@@ -166,8 +166,12 @@ function matchesSelectedFeature(candidate, selected) {
 }
 
 function getFeatureName(properties) {
-  const entry = Object.entries(properties).find(([key, value]) => /^(name|name_1|nama|nama_prov|namobj|shapeName|admin)$/i.test(key) && value != null && String(value).trim());
-  return entry ? String(entry[1]).trim() : "selected_area";
+  const preferredFields = ["WADMKC", "KECAMATAN", "NAMOBJ", "NAME_3", "name_3", "name", "NAME_1", "nama", "nama_prov", "shapeName", "admin"];
+  for (const field of preferredFields) {
+    const entry = Object.entries(properties).find(([key, value]) => normalizeKey(key) === normalizeKey(field) && value != null && String(value).trim());
+    if (entry) return String(entry[1]).trim();
+  }
+  return "selected_area";
 }
 
 function findProvinceNameField(fields) {

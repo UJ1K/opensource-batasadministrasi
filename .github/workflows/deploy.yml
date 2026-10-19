@@ -18,10 +18,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Download subdistrict PMTiles archive
+        run: |
+          mkdir -p public
+          curl --fail --location --retry 3 --retry-delay 2 \
+            https://github.com/UJ1K/opensource-batasadministrasi/releases/download/v1.0.0/kecamatan_admin.pmtiles \
+            --output public/kecamatan_admin.pmtiles
       - name: Build site
         run: npm run build
         env:
           VITE_PMTILES_URL: ${{ vars.VITE_PMTILES_URL }}
+          VITE_SUBDISTRICT_PMTILES_URL: https://uj1k.github.io/opensource-batasadministrasi/kecamatan_admin.pmtiles
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist

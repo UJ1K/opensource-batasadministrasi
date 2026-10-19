@@ -5,6 +5,7 @@ import createGlobe from "cobe";
 import "./style.css";
 
 const tileUrl = import.meta.env.VITE_PMTILES_URL;
+const subdistrictTileUrl = import.meta.env.VITE_SUBDISTRICT_PMTILES_URL;
 const intro = document.querySelector("#globe-intro");
 const introStatus = document.querySelector("#intro-status");
 const introPhase = document.querySelector("#intro-phase");
@@ -117,7 +118,8 @@ const map = new maplibregl.Map({
         tileSize: 256,
         attribution: "Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community"
       },
-      admin: { type: "vector", url: `pmtiles://${tileUrl}`, attribution: "Indonesia administrative boundaries" }
+      admin: { type: "vector", url: `pmtiles://${tileUrl}`, attribution: "Indonesia provincial boundaries" },
+      ...(subdistrictTileUrl ? { subdistrict: { type: "vector", url: `pmtiles://${subdistrictTileUrl}`, attribution: "Indonesia subdistrict boundaries" } } : {})
     },
     layers: [{ id: "basemap", type: "raster", source: "osm", paint: { "raster-opacity": 1 } }]
   }
@@ -132,58 +134,85 @@ const exportProgress = document.querySelector("#export-progress");
 const exportStatus = document.querySelector("#export-status");
 const featureCard = document.querySelector("#feature-card");
 const themeButtons = [...document.querySelectorAll("[data-theme]")];
-let featureLayers = [];
+const boundaryInputs = [...document.querySelectorAll('input[name="boundary-level"]')];
+const featureLayersByLevel = { province: [], subdistrict: [] };
+const allFeatureLayers = [];
 let latestFeature = null;
 let theme = "light";
-let pmtilesArchive;
+let activeBoundary = "province";
+const archiveBySource = {};
 let exportAbortController;
 
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
-map.on("load", async () => {
+function addArchiveLayers(level, sourceId, vectorLayers) {
+  for (const layer of vectorLayers) {
+    const sourceLayer = layer.id || layer.name;
+    if (!sourceLayer) continue;
+    const layerId = `admin-${level}-${sourceLayer}`;
+    map.addLayer({
+      id: layerId,
+      source: sourceId,
+      "source-layer": sourceLayer,
+      type: "fill",
+      layout: { visibility: activeBoundary === level ? "visible" : "none" },
+      paint: {
+        "fill-color": theme === "light" ? "#bfcfb9" : "#70918b",
+        "fill-opacity": 0.58,
+        "fill-outline-color": theme === "light" ? "#637565" : "#d4a06f"
+      }
+    });
+    featureLayersByLevel[level].push(layerId);
+    allFeatureLayers.push(layerId);
+    const lineId = `${layerId}-line`;
+    map.addLayer({
+      id: lineId,
+      source: sourceId,
+      "source-layer": sourceLayer,
+      type: "line",
+      layout: { visibility: activeBoundary === level ? "visible" : "none" },
+      paint: { "line-color": theme === "light" ? "#637565" : "#d4a06f", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
+    });
+    featureLayersByLevel[level].push(lineId);
+    allFeatureLayers.push(lineId);
+  }
+}
+
+async function initializeArchive(level, sourceId, url) {
+  const radio = document.querySelector(`#${level === "province" ? "layer-toggle" : "subdistrict-toggle"}`);
+  if (!url) {
+    if (radio) radio.disabled = true;
+    return;
+  }
   try {
-    pmtilesArchive = protocol.get(tileUrl);
-    const [header, metadata] = await Promise.all([pmtilesArchive.getHeader(), pmtilesArchive.getMetadata()]);
-    const layers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers : [];
-
-    for (const layer of layers) {
-      const sourceLayer = layer.id || layer.name;
-      if (!sourceLayer) continue;
-      const layerId = `admin-${sourceLayer}`;
-      map.addLayer({
-        id: layerId,
-        source: "admin",
-        "source-layer": sourceLayer,
-        type: "fill",
-        paint: {
-          "fill-color": theme === "light" ? "#bfcfb9" : "#70918b",
-          "fill-opacity": 0.58,
-          "fill-outline-color": theme === "light" ? "#637565" : "#d4a06f"
-        }
-      });
-      featureLayers.push(layerId);
-      map.addLayer({
-        id: `${layerId}-line`,
-        source: "admin",
-        "source-layer": sourceLayer,
-        type: "line",
-        paint: { "line-color": theme === "light" ? "#637565" : "#d4a06f", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
-      });
-      featureLayers.push(`${layerId}-line`);
-    }
-
-    if (header.minLon != null && header.minLat != null && header.maxLon != null && header.maxLat != null) {
+    const archive = protocol.get(url);
+    const [header, metadata] = await Promise.all([archive.getHeader(), archive.getMetadata()]);
+    const vectorLayers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers : [];
+    archiveBySource[sourceId] = archive;
+    addArchiveLayers(level, sourceId, vectorLayers);
+    if (radio) radio.disabled = vectorLayers.length === 0;
+    if (level === "province" && header.minLon != null && header.minLat != null && header.maxLon != null && header.maxLat != null) {
       map.fitBounds([[header.minLon, header.minLat], [header.maxLon, header.maxLat]], { padding: 36, maxZoom: 4.5, duration: 0 });
     }
-
+    if (radio && !vectorLayers.length) radio.title = "This archive has no vector layers.";
   } catch (error) {
-    console.error("Unable to load PMTiles archive:", error);
-    exportStatus.textContent = "Archive unavailable. Check the PMTiles URL and storage access.";
+    console.error(`Unable to load ${level} PMTiles archive:`, error);
+    if (radio) {
+      radio.disabled = true;
+      radio.title = "Archive unavailable. Check the PMTiles URL, byte-range access, and CORS.";
+    }
   }
+}
+
+map.on("load", async () => {
+  await Promise.all([
+    initializeArchive("province", "admin", tileUrl),
+    initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
+  ]);
 });
 
 exportButton.addEventListener("click", async () => {
-  if (!pmtilesArchive || !latestFeature) return;
+  if (!latestFeature) return;
   exportAbortController = new AbortController();
   exportButton.disabled = true;
   cancelExportButton.hidden = false;
@@ -192,9 +221,11 @@ exportButton.addEventListener("click", async () => {
   exportProgress.max = 1;
   try {
     const { createProvinceShapefile } = await import("./province-export.js");
+    const archive = archiveBySource[latestFeature.source];
+    if (!archive) throw new Error("The selected boundary archive is unavailable.");
     const sourceLayer = latestFeature.sourceLayer || latestFeature.layer?.['source-layer'];
     if (!sourceLayer) throw new Error("Could not identify the selected feature's source layer.");
-    const result = await createProvinceShapefile(pmtilesArchive, sourceLayer, latestFeature, {
+    const result = await createProvinceShapefile(archive, sourceLayer, latestFeature, {
       signal: exportAbortController.signal,
       onProgress: ({ stage, completed, total, count }) => {
         exportStatus.textContent = count
@@ -228,19 +259,22 @@ exportButton.addEventListener("click", async () => {
 cancelExportButton.addEventListener("click", () => exportAbortController?.abort());
 
 map.on("error", (event) => {
-  if (event?.sourceId === "admin") console.error("Admin tile request failed:", event.error || event);
+  if (event?.sourceId === "admin" || event?.sourceId === "subdistrict") console.error(`${event.sourceId} tile request failed:`, event.error || event);
 });
 
 map.on("click", (event) => {
-  if (!featureLayers.length) return;
-  const feature = map.queryRenderedFeatures(event.point, { layers: featureLayers.filter((id) => map.getLayer(id) && !id.endsWith("-line")) })[0];
+  const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line"));
+  if (!fillLayers.length) return;
+  const feature = map.queryRenderedFeatures(event.point, { layers: fillLayers })[0];
   if (!feature) { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; return; }
   latestFeature = feature;
   exportButton.disabled = false;
   exportStatus.textContent = "";
   const props = feature.properties || {};
   const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
-  const title = props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
+  const title = activeBoundary === "subdistrict"
+    ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
+    : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
   document.querySelector("#feature-title").textContent = title;
   document.querySelector("#feature-properties").innerHTML = entries.length
     ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
@@ -251,14 +285,20 @@ map.on("click", (event) => {
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
 
 map.on("mousemove", (event) => {
-  const hasFeature = featureLayers.some((id) => map.getLayer(id) && !id.endsWith("-line") && map.queryRenderedFeatures(event.point, { layers: [id] }).length);
+  const hasFeature = featureLayersByLevel[activeBoundary].some((id) => map.getLayer(id) && !id.endsWith("-line") && map.queryRenderedFeatures(event.point, { layers: [id] }).length);
   map.getCanvas().style.cursor = hasFeature ? "pointer" : "grab";
 });
 
-document.querySelector("#layer-toggle").addEventListener("change", (event) => {
-  for (const id of featureLayers) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", event.target.checked ? "visible" : "none");
-  if (!event.target.checked) featureCard.hidden = true;
-});
+boundaryInputs.forEach((input) => input.addEventListener("change", () => {
+  if (!input.checked) return;
+  activeBoundary = input.value;
+  for (const [level, ids] of Object.entries(featureLayersByLevel)) {
+    for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", level === activeBoundary ? "visible" : "none");
+  }
+  featureCard.hidden = true;
+  latestFeature = null;
+  exportButton.disabled = true;
+}));
 
 document.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
 document.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
@@ -270,7 +310,7 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
   themeButtons.forEach((candidate) => candidate.classList.toggle("active", candidate === button));
   const dark = theme === "dark";
   map.setPaintProperty("basemap", "raster-opacity", dark ? 0.85 : 1);
-  for (const id of featureLayers) {
+  for (const id of allFeatureLayers) {
     if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#70918b" : "#bfcfb9");
       map.setPaintProperty(id, "fill-outline-color", dark ? "#d4a06f" : "#637565");
