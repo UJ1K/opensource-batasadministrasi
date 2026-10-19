@@ -1,5 +1,7 @@
 # Export an administrative area
 
+Open the live map: [https://uj1k.github.io/opensource-batasadministrasi/](https://uj1k.github.io/opensource-batasadministrasi/)
+
 1. Open the map and wait for the administrative boundaries to appear.
 2. Choose **Batas Provinsi** or **Batas Kecamatan** in the layer list. Only one boundary level is shown at a time.
 3. Click an area in the active layer.
