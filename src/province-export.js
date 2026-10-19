@@ -1,5 +1,6 @@
 const INDONESIA_BOUNDS = { minLon: 90, minLat: -18, maxLon: 146, maxLat: 15 };
-const MAX_EXPORT_TILES = 1500;
+const MAX_EXPORT_TILES = 12000;
+const MAX_CANDIDATE_TILES = 250000;
 const PROVINCE_NAME_FIELDS = [
   "province", "provinsi", "province_name", "provinsi_name", "nama_provinsi",
   "namaprov", "prov_name", "name_1", "nama_prov", "wadmpr", "prov", "name"
@@ -31,24 +32,11 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   const minZoom = Math.max(header.minZoom, Number(sourceLayer.minzoom ?? header.minZoom));
   const maxZoom = Math.min(header.maxZoom, Number(sourceLayer.maxzoom ?? header.maxZoom));
   if (minZoom > maxZoom) throw new Error("The selected layer has no available zoom levels.");
-  const zoom = Math.max(minZoom, Math.min(6, maxZoom));
-  const scale = 2 ** zoom;
-  const tileX = (longitude) => Math.max(0, Math.min(scale - 1, Math.floor((longitude + 180) / 360 * scale)));
-  const tileY = (latitude) => {
-    const radians = latitude * Math.PI / 180;
-    const mercatorY = (1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2;
-    return Math.max(0, Math.min(scale - 1, Math.floor(mercatorY * scale)));
-  };
-  const minX = tileX(bounds.minLon);
-  const maxX = tileX(bounds.maxLon);
-  const minY = tileY(bounds.maxLat);
-  const maxY = tileY(bounds.minLat);
-  const tiles = [];
-  for (let x = minX; x <= maxX; x += 1) {
-    for (let y = minY; y <= maxY; y += 1) tiles.push({ x, y });
-  }
+  const zoom = maxZoom;
+  const tiles = await findFeatureTiles(archive, selectedFeature, layerId, minZoom, zoom, bounds, { signal, onProgress });
+  if (!tiles.length) throw new Error("No source tiles were found for the selected area at the archive's highest detail zoom.");
   if (tiles.length > MAX_EXPORT_TILES) {
-    throw new Error(`This layer needs ${tiles.length.toLocaleString()} tiles at zoom ${zoom}; the in-browser export limit is ${MAX_EXPORT_TILES.toLocaleString()}.`);
+    throw new Error(`The selected area needs ${tiles.length.toLocaleString()} source tiles at zoom ${zoom}, above this browser export's ${MAX_EXPORT_TILES.toLocaleString()} tile limit. The archive's full detail can't be safely assembled in this browser.`);
   }
 
   const nameField = findProvinceNameField(sourceLayer.fields || {});
@@ -61,7 +49,7 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
     while (nextIndex < tiles.length) {
       if (signal?.aborted) throw new DOMException("Export cancelled.", "AbortError");
       const tile = tiles[nextIndex++];
-      const response = await archive.getZxy(zoom, tile.x, tile.y, signal);
+      const response = tile.data ? { data: tile.data } : await archive.getZxy(zoom, tile.x, tile.y, signal);
       if (response?.data) {
         const vectorTile = new VectorTile(new PbfReader(response.data));
         const layer = vectorTile.layers[layerId];
@@ -132,6 +120,118 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   const fileName = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area";
   onProgress?.({ stage: "Ready", completed: 1, total: 1, count: features.length });
   return { blob: new Blob([zipBytes], { type: "application/zip" }), count: features.length, zoom, name, fileName };
+}
+
+async function findFeatureTiles(archive, selectedFeature, layerId, minZoom, maxZoom, bounds, { signal, onProgress } = {}) {
+  const [{ VectorTile }, { PbfReader }] = await Promise.all([import("@mapbox/vector-tile"), import("pbf")]);
+  // Locate the feature at a useful intermediate zoom, where the national tile
+  // range stays practical and small islands are less likely to be generalized away.
+  const coarseZoom = Math.min(maxZoom, Math.max(minZoom, 8));
+  const candidates = tilesForBounds(bounds, coarseZoom);
+  if (candidates.length > MAX_CANDIDATE_TILES) throw new Error("The archive's coverage is too large to search safely in this browser.");
+  const matched = [];
+  let cursor = 0;
+  let coarseCompleted = 0;
+  onProgress?.({ stage: "Locating selected area", completed: 0, total: candidates.length });
+  async function readCoarse() {
+    while (cursor < candidates.length) {
+      signal?.throwIfAborted();
+      const tile = candidates[cursor++];
+      const response = await archive.getZxy(coarseZoom, tile.x, tile.y, signal);
+      if (!response?.data) {
+        coarseCompleted += 1;
+        onProgress?.({ stage: "Locating selected area", completed: coarseCompleted, total: candidates.length });
+        continue;
+      }
+      const layer = new VectorTile(new PbfReader(response.data)).layers[layerId];
+      if (layer) {
+        for (let index = 0; index < layer.length; index += 1) {
+          const feature = layer.feature(index);
+          if (feature.type === 3 && matchesSelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeature)) {
+            matched.push(feature.toGeoJSON(tile.x, tile.y, coarseZoom));
+          }
+        }
+      }
+      coarseCompleted += 1;
+      onProgress?.({ stage: "Locating selected area", completed: coarseCompleted, total: candidates.length });
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, () => readCoarse()));
+  if (!matched.length) return [];
+
+  const extent = geometryBounds(matched.map((feature) => feature.geometry).filter(Boolean));
+  if (!extent) return [];
+  // A one coarse-tile margin catches detached pieces near the outer edge while
+  // keeping the maximum-zoom read focused on the selected area.
+  const margin = 360 / (2 ** coarseZoom);
+  const highDetailBounds = {
+    minLon: Math.max(bounds.minLon, extent.minLon - margin),
+    minLat: Math.max(bounds.minLat, extent.minLat - margin),
+    maxLon: Math.min(bounds.maxLon, extent.maxLon + margin),
+    maxLat: Math.min(bounds.maxLat, extent.maxLat + margin)
+  };
+  const highDetailTiles = tilesForBounds(highDetailBounds, maxZoom);
+  if (highDetailTiles.length > MAX_CANDIDATE_TILES) throw new Error("This selected area's full-detail coverage is too large for a browser export.");
+
+  // Eliminate empty coordinates from the candidate rectangle by retaining only
+  // tile coordinates that actually contain the matching feature at max zoom.
+  const present = [];
+  cursor = 0;
+  let checked = 0;
+  onProgress?.({ stage: `Finding source detail at zoom ${maxZoom}`, completed: 0, total: highDetailTiles.length });
+  async function checkHighDetail() {
+    while (cursor < highDetailTiles.length) {
+      signal?.throwIfAborted();
+      const tile = highDetailTiles[cursor++];
+      const response = await archive.getZxy(maxZoom, tile.x, tile.y, signal);
+      if (!response?.data) continue;
+      const layer = new VectorTile(new PbfReader(response.data)).layers[layerId];
+      if (!layer) continue;
+      for (let index = 0; index < layer.length; index += 1) {
+        const feature = layer.feature(index);
+        if (feature.type === 3 && matchesSelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeature)) {
+          present.push({ ...tile, data: response.data });
+          if (present.length > MAX_EXPORT_TILES) {
+            throw new Error(`The selected area needs more than ${MAX_EXPORT_TILES.toLocaleString()} source tiles at zoom ${maxZoom}, above this browser export's safe tile limit.`);
+          }
+          break;
+        }
+      }
+      checked += 1;
+      onProgress?.({ stage: `Finding source detail at zoom ${maxZoom}`, completed: checked, total: highDetailTiles.length });
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(8, highDetailTiles.length) }, () => checkHighDetail()));
+  return present;
+}
+
+function tilesForBounds(bounds, zoom) {
+  const scale = 2 ** zoom;
+  const tileX = (longitude) => Math.max(0, Math.min(scale - 1, Math.floor((longitude + 180) / 360 * scale)));
+  const tileY = (latitude) => {
+    const radians = latitude * Math.PI / 180;
+    return Math.max(0, Math.min(scale - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * scale)));
+  };
+  const minX = tileX(bounds.minLon), maxX = tileX(bounds.maxLon);
+  const minY = tileY(bounds.maxLat), maxY = tileY(bounds.minLat);
+  const tiles = [];
+  for (let x = minX; x <= maxX; x += 1) for (let y = minY; y <= maxY; y += 1) tiles.push({ x, y });
+  return tiles;
+}
+
+function geometryBounds(geometries) {
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  const visit = (coordinates) => {
+    if (!Array.isArray(coordinates)) return;
+    if (typeof coordinates[0] === "number" && typeof coordinates[1] === "number") {
+      minLon = Math.min(minLon, coordinates[0]); maxLon = Math.max(maxLon, coordinates[0]);
+      minLat = Math.min(minLat, coordinates[1]); maxLat = Math.max(maxLat, coordinates[1]);
+      return;
+    }
+    for (const child of coordinates) visit(child);
+  };
+  for (const geometry of geometries) visit(geometry.coordinates);
+  return Number.isFinite(minLon) ? { minLon, minLat, maxLon, maxLat } : null;
 }
 
 function cleanPolygon(polygon) {
