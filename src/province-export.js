@@ -6,9 +6,10 @@ const PROVINCE_NAME_FIELDS = [
 ];
 
 export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
-  const [{ VectorTile }, { PbfReader }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
+  const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
+    import("polygon-clipping"),
     import("@mapbox/shp-write"),
     import("fflate")
   ]);
@@ -79,7 +80,9 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
             } else {
               mergeSharedProperties(group.properties, feature.properties);
             }
-            group.geometries.push(feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates);
+            const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+            const cleanPolygons = polygons.map(cleanPolygon).filter(Boolean);
+            if (cleanPolygons.length) group.geometries.push(cleanPolygons);
           }
         }
       }
@@ -91,10 +94,19 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   if (!groups.size) throw new Error("No matching polygon tiles were found for the selected area.");
 
   const features = [];
+  let dissolved = 0;
   for (const group of groups.values()) {
     if (signal?.aborted) throw new DOMException("Export cancelled.", "AbortError");
-    const polygons = group.geometries.flatMap((geometry) => geometry);
+    let polygons;
+    try {
+      polygons = polygonClipping.union(group.geometries[0], ...group.geometries.slice(1));
+    } catch (error) {
+      throw new Error(`Could not dissolve the selected area's tile edges: ${error.message}`);
+    }
     if (polygons.length) features.push({ type: "Feature", geometry: { type: "MultiPolygon", coordinates: polygons }, properties: group.properties });
+    dissolved += 1;
+    onProgress?.({ stage: "Removing tile seams", completed: dissolved, total: groups.size });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   if (!features.length) throw new Error("No province polygons could be assembled from the selected layer.");
 
@@ -120,6 +132,29 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   const fileName = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area";
   onProgress?.({ stage: "Ready", completed: 1, total: 1, count: features.length });
   return { blob: new Blob([zipBytes], { type: "application/zip" }), count: features.length, zoom, name, fileName };
+}
+
+function cleanPolygon(polygon) {
+  if (!Array.isArray(polygon)) return null;
+  const rings = polygon.map((ring) => {
+    if (!Array.isArray(ring)) return null;
+    const clean = [];
+    for (const point of ring) {
+      const x = Number(point?.[0]);
+      const y = Number(point?.[1]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const previous = clean[clean.length - 1];
+      if (!previous || previous[0] !== x || previous[1] !== y) clean.push([x, y]);
+    }
+    if (clean.length > 1) {
+      const first = clean[0];
+      const last = clean[clean.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) clean.push([...first]);
+    }
+    const distinct = new Set(clean.slice(0, -1).map(([x, y]) => `${x},${y}`));
+    return distinct.size >= 3 && clean.length >= 4 ? clean : null;
+  }).filter(Boolean);
+  return rings.length ? rings : null;
 }
 
 function matchesSelectedFeature(candidate, selected) {
