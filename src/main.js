@@ -233,9 +233,9 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       type: "fill",
       layout: { visibility: activeBoundary === level ? "visible" : "none" },
       paint: {
-        "fill-color": theme === "light" ? "#bfcfb9" : "#34c759",
+        "fill-color": theme === "light" ? "#c7cfb9b4" : "#34c759",
         "fill-opacity": theme === "light" ? 0.58 : 0.45,
-        "fill-outline-color": theme === "light" ? "#637565" : "#248a3d"
+        "fill-outline-color": theme === "light" ? "#e101ff" : "#248a3d"
       }
     });
     featureLayersByLevel[level].push(layerId);
@@ -510,7 +510,7 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#248a3d" : "#637565");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#ff0000" : "#637565");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
       map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
