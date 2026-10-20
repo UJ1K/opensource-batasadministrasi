@@ -150,6 +150,7 @@ let theme = "light";
 let activeBoundary = "province";
 const archiveBySource = {};
 let exportAbortController;
+let highlightInterval; // Declare once globally here
 
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -232,7 +233,7 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       type: "fill",
       layout: { visibility: activeBoundary === level ? "visible" : "none" },
       paint: {
-        "fill-color": theme === "light" ? "#c7cfb9b4" : "#34c759",
+        "fill-color": theme === "light" ? "#c7cfb9b4" : "#43f14cb7",
         "fill-opacity": theme === "light" ? 0.58 : 0.45,
         "fill-outline-color": theme === "light" ? "#e101ff" : "#e101ff"
       }
@@ -246,7 +247,7 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       "source-layer": sourceLayer,
       type: "line",
       layout: { visibility: activeBoundary === level ? "visible" : "none" },
-      paint: { "line-color": theme === "light" ? "#637565" : "#e101ff", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
+      paint: { "line-color": theme === "light" ? "#e101ff" : "#e101ff", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
     });
     featureLayersByLevel[level].push(lineId);
     allFeatureLayers.push(lineId);
@@ -338,43 +339,17 @@ map.on("load", async () => {
     layout: {
       "text-field": ["get", "label"],
       "text-font": ["Open Sans Semibold"],
-      "text-size": 16, // Larger text for emphasis
+      "text-size": 16,
       "text-anchor": "center"
     },
     paint: {
-      "text-color": "#ffd700", // Bright yellow highlight color
+      "text-color": "#ffd700",
       "text-halo-color": "#000000",
       "text-halo-width": 2.5
     }
   });
 });
 map.on("idle", refreshBoundaryLabels);
-
-function flashHighlightEffect() {
-  if (highlightInterval) clearInterval(highlightInterval);
-  
-  let count = 0;
-  const maxFlashes = 4; // Blinks 4 times
-  
-  highlightInterval = setInterval(() => {
-    count++;
-    const isYellow = count % 2 === 1;
-    if (map.getLayer("selected-feature-layer")) {
-      map.setPaintProperty(
-        "selected-feature-layer", 
-        "fill-color", 
-        isYellow ? "#ffd700" : "#007aff"
-      );
-    }
-    
-    if (count >= maxFlashes * 2) {
-      clearInterval(highlightInterval);
-      if (map.getLayer("selected-feature-layer")) {
-        map.setPaintProperty("selected-feature-layer", "fill-color", "#ffd700");
-      }
-    }
-  }, 200);
-}
 
 function flashLabelEffect() {
   if (highlightInterval) clearInterval(highlightInterval);
@@ -466,7 +441,6 @@ map.on("click", (event) => {
     ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
     : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
 
-  // Update highlighted label source position & text
   const anchor = polygonAnchor(feature.geometry);
   if (anchor) {
     map.getSource("selected-label-source")?.setData({
@@ -481,14 +455,13 @@ map.on("click", (event) => {
     flashLabelEffect();
   }
 
-  // Populate feature card properties & title
   const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
   document.querySelector("#feature-title").textContent = title;
   document.querySelector("#feature-properties").innerHTML = entries.length
     ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
     : `<p class="no-properties">This feature has no additional attributes.</p>`;
   
-  // CRITICAL: Unhide the card so the download sheet pops up
+  // Ensure the popup sheet card shows up
   featureCard.hidden = false;
 });
 
@@ -515,17 +488,11 @@ boundaryInputs.forEach((input) => input.addEventListener("change", () => {
   featureCard.hidden = true;
   latestFeature = null;
   exportButton.disabled = true;
-  map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
+  map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
 }));
 
 document.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
 document.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
-document.querySelector("#feature-close").addEventListener("click", () => { 
-  featureCard.hidden = true; 
-  latestFeature = null; 
-  exportButton.disabled = true; 
-  map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
-});
 
 themeButtons.forEach((button) => button.addEventListener("click", () => {
   theme = button.dataset.theme;
@@ -546,10 +513,10 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#ff0000" : "#e101ff");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#ff0000" : "#ff0000");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
-      map.setPaintProperty(id, "line-color", dark ? "#ff0000" : "#e101ff");
+      map.setPaintProperty(id, "line-color", dark ? "#ff0000" : "#ff0000");
     }
   }
 }));
