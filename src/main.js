@@ -336,6 +336,7 @@ map.on("load", async () => {
     data: { type: "FeatureCollection", features: [] }
   });
 
+  // 1. Fill Layer first
   map.addLayer({
     id: "selected-feature-layer",
     type: "fill",
@@ -346,13 +347,14 @@ map.on("load", async () => {
     }
   });
 
+  // 2. Outline Layer added AFTER fill layer so the border sits cleanly on top
   map.addLayer({
     id: "selected-feature-outline",
     type: "line",
     source: "selected-feature-source",
     paint: {
-      "line-color": "#ffffff",
-      "line-width": 2.5
+      "line-color": "#ffffff", // Bright white high-contrast outline
+      "line-width": 4          // Thicker, easily visible border line
     }
   });
 });
