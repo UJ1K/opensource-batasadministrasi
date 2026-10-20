@@ -150,7 +150,6 @@ let theme = "light";
 let activeBoundary = "province";
 const archiveBySource = {};
 let exportAbortController;
-let highlightInterval;
 
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -326,29 +325,26 @@ map.on("load", async () => {
     initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
   ]);
 
-  // Click-highlight GeoJSON source and layers
-  map.addSource("selected-feature-source", {
+  // Add source and layer specifically for the selected label highlight
+  map.addSource("selected-label-source", {
     type: "geojson",
     data: { type: "FeatureCollection", features: [] }
   });
 
   map.addLayer({
-    id: "selected-feature-layer",
-    type: "fill",
-    source: "selected-feature-source",
+    id: "selected-label-highlight",
+    type: "symbol",
+    source: "selected-label-source",
+    layout: {
+      "text-field": ["get", "label"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 16, // Larger text for emphasis
+      "text-anchor": "center"
+    },
     paint: {
-      "fill-color": "#ffd700",
-      "fill-opacity": 0.8
-    }
-  });
-
-  map.addLayer({
-    id: "selected-feature-outline",
-    type: "line",
-    source: "selected-feature-source",
-    paint: {
-      "line-color": "#ffffff",
-      "line-width": 3.5
+      "text-color": "#ffd700", // Bright yellow highlight color
+      "text-halo-color": "#000000",
+      "text-halo-width": 2.5
     }
   });
 });
@@ -375,6 +371,32 @@ function flashHighlightEffect() {
       clearInterval(highlightInterval);
       if (map.getLayer("selected-feature-layer")) {
         map.setPaintProperty("selected-feature-layer", "fill-color", "#ffd700");
+      }
+    }
+  }, 200);
+}
+
+function flashLabelEffect() {
+  if (highlightInterval) clearInterval(highlightInterval);
+  
+  let count = 0;
+  const maxFlashes = 4; // Blinks 4 times
+  
+  highlightInterval = setInterval(() => {
+    count++;
+    const isYellow = count % 2 === 1;
+    if (map.getLayer("selected-label-highlight")) {
+      map.setPaintProperty(
+        "selected-label-highlight", 
+        "text-color", 
+        isYellow ? "#ffd700" : "#007aff"
+      );
+    }
+    
+    if (count >= maxFlashes * 2) {
+      clearInterval(highlightInterval);
+      if (map.getLayer("selected-label-highlight")) {
+        map.setPaintProperty("selected-label-highlight", "text-color", "#ffd700");
       }
     }
   }, 200);
@@ -431,7 +453,7 @@ map.on("click", (event) => {
     featureCard.hidden = true; 
     latestFeature = null; 
     exportButton.disabled = true; 
-    map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
+    map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
     return; 
   }
   
@@ -439,28 +461,40 @@ map.on("click", (event) => {
   exportButton.disabled = false;
   exportStatus.textContent = "";
 
-  // Pass complete feature object to highlight source
-  map.getSource("selected-feature-source")?.setData({
-    type: "FeatureCollection",
-    features: [{
-      type: "Feature",
-      geometry: feature.geometry,
-      properties: feature.properties
-    }]
-  });
-  
-  flashHighlightEffect();
-
   const props = feature.properties || {};
-  const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
   const title = activeBoundary === "subdistrict"
     ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
     : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
+
+  // Calculate the center/anchor point of the clicked polygon to place the highlighted label
+  const anchor = polygonAnchor(feature.geometry);
+  if (anchor) {
+    map.getSource("selected-label-source")?.setData({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: { label: title },
+        geometry: { type: "Point", coordinates: anchor.point }
+      }]
+    });
+    
+    // Optional: Trigger a quick flash animation on the label text color
+    flashLabelEffect();
+  }
+
+  const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
   document.querySelector("#feature-title").textContent = title;
   document.querySelector("#feature-properties").innerHTML = entries.length
     ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
     : `<p class="no-properties">This feature has no additional attributes.</p>`;
   featureCard.hidden = false;
+});
+
+document.querySelector("#feature-close").addEventListener("click", () => { 
+  featureCard.hidden = true; 
+  latestFeature = null; 
+  exportButton.disabled = true; 
+  map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
 });
 
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
