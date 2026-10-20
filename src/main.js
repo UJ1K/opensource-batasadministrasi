@@ -516,7 +516,7 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#248a3d" : "#637565");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#fc0000" : "#637565");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
       map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
