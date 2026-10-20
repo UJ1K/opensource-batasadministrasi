@@ -153,9 +153,9 @@ let exportAbortController;
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 function boundaryLabelPalette() {
-  return theme === "dark"
-    ? { text: "#f5f2e9", halo: "#18221f" }
-    : { text: "#18372c", halo: "#fffef9" };
+  // The basemap remains satellite imagery in both UI themes, so use one stable
+  // high-contrast label treatment over both bright land and dark water tiles.
+  return { text: "#ffffff", halo: "#17211de8" };
 }
 
 function labelFieldCandidates(level) {
@@ -277,8 +277,8 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
         visibility: activeBoundary === level ? "visible" : "none",
         "symbol-placement": "point",
         "text-field": ["get", "label"],
-        "text-font": ["Open Sans Regular"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], minZoom, 9, maxZoom, 13],
+        "text-font": ["Open Sans Semibold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], minZoom, 10, maxZoom, 13],
         "text-max-width": 9,
         "text-padding": 3,
         "text-allow-overlap": false,
@@ -288,8 +288,8 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       paint: {
         "text-color": labelColors.text,
         "text-halo-color": labelColors.halo,
-        "text-halo-width": 1.6,
-        "text-halo-blur": 0.2
+        "text-halo-width": 2.1,
+        "text-halo-blur": 0.25
       }
     });
     featureLayersByLevel[level].push(labelId);
