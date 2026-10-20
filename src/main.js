@@ -1,12 +1,101 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
+import createGlobe from "cobe";
 import "./style.css";
 
 const tileUrl = import.meta.env.VITE_PMTILES_URL;
 const subdistrictTileUrl = import.meta.env.VITE_SUBDISTRICT_PMTILES_URL;
+const intro = document.querySelector("#globe-intro");
+const introStatus = document.querySelector("#intro-status");
+const introPhase = document.querySelector("#intro-phase");
+const introCanvas = document.querySelector("#cobe-globe");
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 if (!tileUrl) {
   throw new Error("Missing VITE_PMTILES_URL. Copy .env.example to .env and set the PMTiles archive URL.");
+}
+
+let introFrame;
+let globe;
+let introClosed = false;
+let indonesiaMarkerAdded = false;
+
+if (intro && introCanvas && !prefersReducedMotion.matches) {
+  const introStarted = performance.now();
+  const spinDuration = 3000;
+  const focusDuration = 1700;
+  const introDuration = 6800;
+  const focusPhi = -(106.85 * Math.PI / 180) - Math.PI / 2;
+  const focusTheta = -6.2 * Math.PI / 180;
+  document.body.classList.add("intro-playing");
+  globe = createGlobe(introCanvas, {
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+    width: 720,
+    height: 720,
+    phi: 0,
+    theta: 0.18,
+    dark: 1,
+    diffuse: 1.15,
+    mapSamples: 12000,
+    mapBrightness: 5,
+    mapBaseBrightness: 0,
+    baseColor: [0.12, 0.20, 0.16],
+    markerColor: [0.80, 0.88, 0.67],
+    glowColor: [0.48, 0.64, 0.49],
+    markers: [],
+    scale: 0.92,
+    offset: [0, 0]
+  });
+
+  function closeIntro() {
+    if (introClosed) return;
+    introClosed = true;
+    cancelAnimationFrame(introFrame);
+    intro.classList.add("is-leaving");
+    window.setTimeout(() => {
+      globe?.destroy();
+      intro.remove();
+      document.body.classList.remove("intro-playing");
+    }, 450);
+  }
+
+  function animateIntro(now) {
+    if (introClosed) return;
+    const elapsed = now - introStarted;
+    let phi;
+    let theta = 0.18;
+    if (elapsed < spinDuration) {
+      phi = (elapsed / spinDuration) * Math.PI * 2;
+      introStatus.textContent = introPhase.textContent = "MENJELAJAHI BUMI";
+    } else if (elapsed < spinDuration + focusDuration) {
+      const progress = Math.min(1, (elapsed - spinDuration) / focusDuration);
+      const eased = progress * progress * (3 - 2 * progress);
+      phi = Math.PI * 2 + (focusPhi - Math.PI * 2) * eased;
+      theta = 0.18 + (focusTheta - 0.18) * eased;
+      introStatus.textContent = introPhase.textContent = "MENUJU INDONESIA";
+      if (progress > 0.72) {
+        intro.classList.add("is-focused");
+        if (!indonesiaMarkerAdded) {
+          indonesiaMarkerAdded = true;
+          globe.update({ markers: [{ location: [-6.2, 106.85], size: 0.055, color: [0.79, 0.88, 0.65], id: "indonesia" }] });
+        }
+      }
+    } else {
+      phi = focusPhi;
+      theta = focusTheta;
+      introStatus.textContent = introPhase.textContent = "INDONESIA · 6° 12′ S, 106° 50′ E";
+      intro.classList.add("is-focused");
+    }
+    globe.update({ phi, theta });
+    intro.style.setProperty("--intro-progress", `${Math.min(100, elapsed / introDuration * 100)}%`);
+    if (elapsed >= introDuration) closeIntro();
+    else introFrame = requestAnimationFrame(animateIntro);
+  }
+
+  document.querySelector("#intro-skip")?.addEventListener("click", closeIntro);
+  introFrame = requestAnimationFrame(animateIntro);
+} else {
+  intro?.remove();
 }
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
