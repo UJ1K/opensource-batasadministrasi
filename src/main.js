@@ -314,13 +314,9 @@ async function initializeArchive(level, sourceId, url) {
     if (level === "province" && header.minLon != null && header.minLat != null && header.maxLon != null && header.maxLat != null) {
       map.fitBounds([[header.minLon, header.minLat], [header.maxLon, header.maxLat]], { padding: 36, maxZoom: 4.5, duration: 0 });
     }
-    if (radio && !vectorLayers.length) radio.title = "This archive has no vector layers.";
   } catch (error) {
     console.error(`Unable to load ${level} PMTiles archive:`, error);
-    if (radio) {
-      radio.disabled = true;
-      radio.title = "Archive unavailable. Check the PMTiles URL, byte-range access, and CORS.";
-    }
+    if (radio) radio.disabled = true;
   }
 }
 
@@ -330,31 +326,29 @@ map.on("load", async () => {
     initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
   ]);
 
-  // Add click-highlight sources and layers
+  // Click-highlight GeoJSON source and layers
   map.addSource("selected-feature-source", {
     type: "geojson",
     data: { type: "FeatureCollection", features: [] }
   });
 
-  // 1. Fill Layer first
   map.addLayer({
     id: "selected-feature-layer",
     type: "fill",
     source: "selected-feature-source",
     paint: {
       "fill-color": "#ffd700",
-      "fill-opacity": 0.75
+      "fill-opacity": 0.8
     }
   });
 
-  // 2. Outline Layer added AFTER fill layer so the border sits cleanly on top
   map.addLayer({
     id: "selected-feature-outline",
     type: "line",
     source: "selected-feature-source",
     paint: {
-      "line-color": "#ffffff", // Bright white high-contrast outline
-      "line-width": 4          // Thicker, easily visible border line
+      "line-color": "#ffffff",
+      "line-width": 3.5
     }
   });
 });
@@ -403,9 +397,7 @@ exportButton.addEventListener("click", async () => {
     const result = await createProvinceShapefile(archive, sourceLayer, latestFeature, {
       signal: exportAbortController.signal,
       onProgress: ({ stage, completed, total, count }) => {
-        exportStatus.textContent = count
-          ? `Preparing ${count} polygon records…`
-          : `${stage} · ${completed} of ${total}`;
+        exportStatus.textContent = count ? `Preparing ${count} records…` : `${stage} · ${completed} of ${total}`;
         exportProgress.max = Math.max(total, 1);
         exportProgress.value = completed;
       }
@@ -416,13 +408,10 @@ exportButton.addEventListener("click", async () => {
     link.download = `${result.fileName}.zip`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-    exportStatus.textContent = `Downloaded ${result.name} as a Shapefile ZIP (WGS 84).`;
+    exportStatus.textContent = `Downloaded ${result.name} as a Shapefile ZIP.`;
   } catch (error) {
     if (error.name === "AbortError") exportStatus.textContent = "Export cancelled.";
-    else {
-      console.error("Unable to export province Shapefile:", error);
-      exportStatus.textContent = error.message || "Export failed. Check the archive layer and storage access.";
-    }
+    else exportStatus.textContent = error.message || "Export failed.";
   } finally {
     exportAbortController = undefined;
     exportButton.disabled = !latestFeature;
@@ -433,14 +422,11 @@ exportButton.addEventListener("click", async () => {
 
 cancelExportButton.addEventListener("click", () => exportAbortController?.abort());
 
-map.on("error", (event) => {
-  if (event?.sourceId === "admin" || event?.sourceId === "subdistrict") console.error(`${event.sourceId} tile request failed:`, event.error || event);
-});
-
 map.on("click", (event) => {
   const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line") && !id.endsWith("-labels"));
   if (!fillLayers.length) return;
   const feature = map.queryRenderedFeatures(event.point, { layers: fillLayers })[0];
+  
   if (!feature) { 
     featureCard.hidden = true; 
     latestFeature = null; 
@@ -453,10 +439,16 @@ map.on("click", (event) => {
   exportButton.disabled = false;
   exportStatus.textContent = "";
 
+  // Pass complete feature object to highlight source
   map.getSource("selected-feature-source")?.setData({
     type: "FeatureCollection",
-    features: [feature]
+    features: [{
+      type: "Feature",
+      geometry: feature.geometry,
+      properties: feature.properties
+    }]
   });
+  
   flashHighlightEffect();
 
   const props = feature.properties || {};
@@ -518,10 +510,10 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#fc0000" : "#637565");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#248a3d" : "#637565");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
-      map.setPaintProperty(id, "line-color", dark ? "#ff0000" : "#637565");
+      map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
     }
   }
 }));
