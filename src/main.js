@@ -18,15 +18,17 @@ if (!tileUrl) {
 let introFrame;
 let globe;
 let introClosed = false;
-let indonesiaMarkerAdded = false;
 
 if (intro && introCanvas && !prefersReducedMotion.matches) {
   const introStarted = performance.now();
   const spinDuration = 3000;
-  const focusDuration = 1700;
+  const focusDuration = 1900;
+  const zoomDuration = 1350;
   const introDuration = 6800;
   const focusPhi = -(106.85 * Math.PI / 180) - Math.PI / 2;
   const focusTheta = -6.2 * Math.PI / 180;
+  const baseScale = 0.92;
+  const focusScale = 1.42;
   document.body.classList.add("intro-playing");
   globe = createGlobe(introCanvas, {
     devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
@@ -42,7 +44,7 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
     baseColor: [0.12, 0.20, 0.16],
     markerColor: [0.80, 0.88, 0.67],
     glowColor: [0.48, 0.64, 0.49],
-    markers: [],
+    markers: [{ location: [-6.2, 106.85], size: 0.065, color: [0.83, 0.91, 0.70], id: "indonesia" }],
     scale: 0.92,
     offset: [0, 0]
   });
@@ -73,20 +75,23 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
       phi = Math.PI * 2 + (focusPhi - Math.PI * 2) * eased;
       theta = 0.18 + (focusTheta - 0.18) * eased;
       introStatus.textContent = introPhase.textContent = "MENUJU INDONESIA";
-      if (progress > 0.72) {
-        intro.classList.add("is-focused");
-        if (!indonesiaMarkerAdded) {
-          indonesiaMarkerAdded = true;
-          globe.update({ markers: [{ location: [-6.2, 106.85], size: 0.055, color: [0.79, 0.88, 0.65], id: "indonesia" }] });
-        }
-      }
+      if (progress > 0.45) intro.classList.add("is-focused");
+    } else if (elapsed < spinDuration + focusDuration + zoomDuration) {
+      const zoomProgress = Math.min(1, (elapsed - spinDuration - focusDuration) / zoomDuration);
+      const easedZoom = 1 - Math.pow(1 - zoomProgress, 3);
+      phi = focusPhi;
+      theta = focusTheta;
+      intro.classList.add("is-focused");
+      globe.update({ phi, theta, scale: baseScale + (focusScale - baseScale) * easedZoom });
+      introStatus.textContent = introPhase.textContent = "MENDEKATI INDONESIA";
     } else {
       phi = focusPhi;
       theta = focusTheta;
-      introStatus.textContent = introPhase.textContent = "INDONESIA · 6° 12′ S, 106° 50′ E";
       intro.classList.add("is-focused");
+      globe.update({ phi, theta, scale: focusScale });
+      introStatus.textContent = introPhase.textContent = "INDONESIA · 6° 12′ S, 106° 50′ E";
     }
-    globe.update({ phi, theta });
+    if (elapsed < spinDuration + focusDuration) globe.update({ phi, theta, scale: baseScale });
     intro.style.setProperty("--intro-progress", `${Math.min(100, elapsed / introDuration * 100)}%`);
     if (elapsed >= introDuration) closeIntro();
     else introFrame = requestAnimationFrame(animateIntro);
