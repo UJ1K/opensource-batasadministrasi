@@ -46,7 +46,7 @@ button:focus-visible, a:focus-visible, input:focus-visible + .switch { outline: 
 .globe-hero::after { width: min(75vw, 720px); aspect-ratio: 1; border: 1px solid #dce7ce16; border-radius: 50%; box-shadow: 0 0 0 52px #dce7ce08, 0 0 0 105px #dce7ce05; }
 .globe-hero.is-leaving { opacity: 0; visibility: hidden; }
 .intro-kicker, .intro-bottom { position: absolute; z-index: 2; display: flex; align-items: center; font: 10px var(--mono); letter-spacing: .12em; }
-.intro-kicker { top: clamp(32px, 7vh, 70px); left: 50%; gap: 10px; margin: 0; padding: 10px 14px; border: 1px solid #b6c7ac55; border-radius: 999px; background: #101a15d9; color: #e0e9d7; font-size: 12px; font-weight: 500; letter-spacing: .08em; translate: -50% 0; white-space: nowrap; }
+.intro-kicker { top: clamp(32px, 7vh, 70px); left: 50%; gap: 10px; margin: 0; color: #e0e9d7; font-size: 12px; font-weight: 500; letter-spacing: .08em; translate: -50% 0; white-space: nowrap; }
 .intro-kicker span { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #bdd394; box-shadow: 0 0 0 3px #bdd39425; }
 .hero-title { position: absolute; z-index: 2; top: clamp(72px, 15vh, 142px); left: 50%; width: min(900px, calc(100% - 36px)); margin: 0; text-align: center; color: #f0f2ec; font: 500 clamp(38px, 6.4vw, 82px)/.98 'Playfair Display', Georgia, serif; letter-spacing: -.045em; translate: -50% 0; }
 .hero-title em { color: #b9cda6; font-style: normal; }
@@ -147,7 +147,7 @@ body.intro-playing { overflow: hidden; }
 }
 @media (max-width: 520px) {
   .globe-hero { padding: 0 16px; }
-  .intro-kicker { top: 6vh; max-width: calc(100% - 20px); padding: 9px 12px; font-size: 10px; letter-spacing: .06em; }
+  .intro-kicker { top: 6vh; max-width: calc(100% - 20px); font-size: 10px; letter-spacing: .06em; }
   .hero-title { top: 14vh; width: calc(100% - 8px); font-size: clamp(34px, 9.4vw, 50px); }
   .intro-globe { top: -19vh; width: max(145vw, 100vh); max-width: 1250px; translate: -50% 0; }
   .intro-bottom { right: 14px; bottom: 12px; left: 14px; gap: 10px; font-size: 8px; }
