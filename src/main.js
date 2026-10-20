@@ -143,6 +143,7 @@ const themeButtons = [...document.querySelectorAll("[data-theme]")];
 const boundaryInputs = [...document.querySelectorAll('input[name="boundary-level"]')];
 const featureLayersByLevel = { province: [], subdistrict: [] };
 const allFeatureLayers = [];
+const boundaryLabelSources = [];
 let latestFeature = null;
 let theme = "light";
 let activeBoundary = "province";
@@ -157,13 +158,67 @@ function boundaryLabelPalette() {
     : { text: "#18372c", halo: "#fffef9" };
 }
 
-function labelTextExpression(level, fields = {}) {
-  const candidates = level === "subdistrict"
+function labelFieldCandidates(level) {
+  return level === "subdistrict"
     ? ["WADMKC", "KECAMATAN", "NAMOBJ", "NAME_3", "name_3", "name", "NAME_2", "NAME"]
     : ["NAME_1", "NAMOBJ", "WADMPR", "PROVINSI", "namaprov", "name_1", "name", "NAME"];
+}
+
+function resolveFields(candidates, fields = {}) {
   const actualFields = new Map(Object.keys(fields).map((field) => [field.toLowerCase(), field]));
-  const resolved = [...new Set(candidates.map((field) => actualFields.get(field.toLowerCase()) || field))];
-  return ["coalesce", ...resolved.map((field) => ["get", field]), ""];
+  return [...new Set(candidates.map((field) => actualFields.get(field.toLowerCase()) || field))];
+}
+
+function polygonAnchor(geometry) {
+  const polygons = geometry?.type === "Polygon" ? [geometry.coordinates] : geometry?.type === "MultiPolygon" ? geometry.coordinates : [];
+  let best;
+  for (const polygon of polygons) {
+    const ring = polygon?.[0];
+    if (!Array.isArray(ring) || ring.length < 4) continue;
+    let twiceArea = 0, cx = 0, cy = 0;
+    for (let index = 0; index < ring.length - 1; index++) {
+      const [x1, y1] = ring[index], [x2, y2] = ring[index + 1];
+      const cross = x1 * y2 - x2 * y1;
+      twiceArea += cross;
+      cx += (x1 + x2) * cross;
+      cy += (y1 + y2) * cross;
+    }
+    const area = Math.abs(twiceArea / 2);
+    if (!area) continue;
+    const point = [cx / (3 * twiceArea), cy / (3 * twiceArea)];
+    if (!best || area > best.area) best = { area, point };
+  }
+  return best;
+}
+
+function refreshBoundaryLabels() {
+  for (const record of boundaryLabelSources) {
+    if (!map.isSourceLoaded(record.sourceId)) continue;
+    const groups = new Map();
+    for (const feature of map.querySourceFeatures(record.sourceId, { sourceLayer: record.sourceLayer })) {
+      const props = feature.properties || {};
+      const name = String(record.nameFields.map((field) => props[field]).find((value) => value != null && String(value).trim()) || "").trim();
+      if (!name) continue;
+      const identity = record.identityFields.map((field) => String(props[field] ?? "").trim().toLocaleLowerCase()).join("|");
+      const key = identity || name.toLocaleLowerCase();
+      const anchor = polygonAnchor(feature.geometry);
+      if (!anchor) continue;
+      const existing = groups.get(key);
+      if (!existing || anchor.area > existing.area) groups.set(key, { name, ...anchor });
+    }
+    const data = {
+      type: "FeatureCollection",
+      features: [...groups.values()].map(({ name, point }) => ({
+        type: "Feature",
+        properties: { label: name },
+        geometry: { type: "Point", coordinates: point }
+      }))
+    };
+    const signature = JSON.stringify(data);
+    if (signature === record.signature) continue;
+    record.signature = signature;
+    map.getSource(record.labelSourceId)?.setData(data);
+  }
 }
 
 function addArchiveLayers(level, sourceId, vectorLayers) {
@@ -201,17 +256,27 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
     const minZoom = level === "subdistrict" ? 7 : 2;
     const maxZoom = level === "subdistrict" ? 18 : 9;
     const labelColors = boundaryLabelPalette();
+    const fields = layer.fields || {};
+    const nameFields = resolveFields(labelFieldCandidates(level), fields);
+    const parentFields = level === "subdistrict"
+      ? resolveFields(["WADMKK", "KABUPATEN", "KOTA", "WADMPR", "PROVINSI", "NAME_1"], fields)
+      : [];
+    const labelSourceId = `${labelId}-source`;
+    map.addSource(labelSourceId, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] }
+    });
+    boundaryLabelSources.push({ sourceId, sourceLayer, labelSourceId, nameFields, identityFields: [...nameFields, ...parentFields], signature: "" });
     map.addLayer({
       id: labelId,
-      source: sourceId,
-      "source-layer": sourceLayer,
+      source: labelSourceId,
       type: "symbol",
       minzoom: minZoom,
       maxzoom: maxZoom,
       layout: {
         visibility: activeBoundary === level ? "visible" : "none",
         "symbol-placement": "point",
-        "text-field": labelTextExpression(level, layer.fields || {}),
+        "text-field": ["get", "label"],
         "text-font": ["Open Sans Regular"],
         "text-size": ["interpolate", ["linear"], ["zoom"], minZoom, 9, maxZoom, 13],
         "text-max-width": 9,
@@ -244,6 +309,7 @@ async function initializeArchive(level, sourceId, url) {
     const vectorLayers = Array.isArray(metadata.vector_layers) ? metadata.vector_layers : [];
     archiveBySource[sourceId] = archive;
     addArchiveLayers(level, sourceId, vectorLayers);
+    refreshBoundaryLabels();
     if (radio) radio.disabled = vectorLayers.length === 0;
     if (level === "province" && header.minLon != null && header.minLat != null && header.maxLon != null && header.maxLat != null) {
       map.fitBounds([[header.minLon, header.minLat], [header.maxLon, header.maxLat]], { padding: 36, maxZoom: 4.5, duration: 0 });
@@ -264,6 +330,7 @@ map.on("load", async () => {
     initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
   ]);
 });
+map.on("idle", refreshBoundaryLabels);
 
 exportButton.addEventListener("click", async () => {
   if (!latestFeature) return;
@@ -317,7 +384,7 @@ map.on("error", (event) => {
 });
 
 map.on("click", (event) => {
-  const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line"));
+  const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line") && !id.endsWith("-labels"));
   if (!fillLayers.length) return;
   const feature = map.queryRenderedFeatures(event.point, { layers: fillLayers })[0];
   if (!feature) { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; return; }
@@ -339,7 +406,7 @@ map.on("click", (event) => {
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
 
 map.on("mousemove", (event) => {
-  const hasFeature = featureLayersByLevel[activeBoundary].some((id) => map.getLayer(id) && !id.endsWith("-line") && map.queryRenderedFeatures(event.point, { layers: [id] }).length);
+  const hasFeature = featureLayersByLevel[activeBoundary].some((id) => map.getLayer(id) && !id.endsWith("-line") && !id.endsWith("-labels") && map.queryRenderedFeatures(event.point, { layers: [id] }).length);
   map.getCanvas().style.cursor = hasFeature ? "pointer" : "grab";
 });
 
