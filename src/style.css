@@ -148,7 +148,7 @@ body.intro-playing { overflow: hidden; }
   .globe-hero { padding: 0 16px; }
   .intro-kicker { top: 6vh; max-width: calc(100% - 20px); font-size: 10px; letter-spacing: .06em; }
   .hero-title { top: 14vh; width: calc(100% - 8px); font-size: clamp(34px, 9.4vw, 50px); }
-  .intro-globe { top: -19vh; width: max(145vw, 100vh); max-width: 1250px; translate: -50% 0; }
+  .intro-globe { top: 18vh; width: min(142vw, 86vh); max-width: 900px; translate: -50% 0; }
   .intro-bottom { right: 14px; bottom: 12px; left: 14px; gap: 10px; font-size: 8px; }
   .intro-bottom > span:first-child { min-width: 0; white-space: nowrap; font-size: 8px; }
   .intro-progress { width: 22vw; flex: none; }

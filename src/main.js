@@ -20,6 +20,7 @@ let globe;
 let introClosed = false;
 
 if (intro && introCanvas && !prefersReducedMotion.matches) {
+  const compactViewport = window.matchMedia("(max-width: 520px)").matches;
   const introStarted = performance.now();
   const spinDuration = 3000;
   const focusDuration = 1900;
@@ -31,14 +32,14 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
   const focusScale = 1.42;
   document.body.classList.add("intro-playing");
   globe = createGlobe(introCanvas, {
-    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
-    width: 720,
-    height: 720,
+    devicePixelRatio: Math.min(window.devicePixelRatio || 1, compactViewport ? 1 : 1.5),
+    width: compactViewport ? 560 : 720,
+    height: compactViewport ? 560 : 720,
     phi: 0,
     theta: 0.18,
     dark: 1,
     diffuse: 1.15,
-    mapSamples: 12000,
+    mapSamples: compactViewport ? 9000 : 12000,
     mapBrightness: 5,
     mapBaseBrightness: 0,
     baseColor: [0.12, 0.20, 0.16],
