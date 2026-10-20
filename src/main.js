@@ -330,6 +330,33 @@ map.on("load", async () => {
     initializeArchive("province", "admin", tileUrl),
     initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
   ]);
+
+  // --- ADD HIGHLIGHT SOURCE & LAYERS HERE ---
+  map.addSource("selected-feature-source", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] }
+  });
+
+  map.addLayer({
+    id: "selected-feature-layer",
+    type: "fill",
+    source: "selected-feature-source",
+    paint: {
+      "fill-color": "#ffd700",
+      "fill-opacity": 0.75
+    }
+  });
+
+  map.addLayer({
+    id: "selected-feature-outline",
+    type: "line",
+    source: "selected-feature-source",
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": 2.5
+    }
+  });
+  // ------------------------------------------
 });
 map.on("idle", refreshBoundaryLabels);
 
@@ -388,21 +415,29 @@ map.on("click", (event) => {
   const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line") && !id.endsWith("-labels"));
   if (!fillLayers.length) return;
   const feature = map.queryRenderedFeatures(event.point, { layers: fillLayers })[0];
-  if (!feature) { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; return; }
+  if (!feature) { 
+    featureCard.hidden = true; 
+    latestFeature = null; 
+    exportButton.disabled = true; 
+    // Clear highlight if clicked outside
+    map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
+    return; 
+  }
+  
   latestFeature = feature;
   exportButton.disabled = false;
   exportStatus.textContent = "";
+
+  // --- UPDATE HIGHLIGHT GEOMETRY & RUN BLINK ANIMATION ---
+  map.getSource("selected-feature-source")?.setData({
+    type: "FeatureCollection",
+    features: [feature]
+  });
+
+  flashHighlightEffect();
+  // ------------------------------------------------------
+
   const props = feature.properties || {};
-  const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
-  const title = activeBoundary === "subdistrict"
-    ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
-    : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
-  document.querySelector("#feature-title").textContent = title;
-  document.querySelector("#feature-properties").innerHTML = entries.length
-    ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
-    : `<p class="no-properties">This feature has no additional attributes.</p>`;
-  featureCard.hidden = false;
-});
 
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
 
@@ -456,8 +491,34 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
 }));
 
 
+let highlightInterval;
 
-
+function flashHighlightEffect() {
+  if (highlightInterval) clearInterval(highlightInterval);
+  
+  let count = 0;
+  const maxFlashes = 4; // Blinks 4 times
+  
+  highlightInterval = setInterval(() => {
+    count++;
+    const isYellow = count % 2 === 1;
+    if (map.getLayer("selected-feature-layer")) {
+      map.setPaintProperty(
+        "selected-feature-layer", 
+        "fill-color", 
+        isYellow ? "#ffd700" : "#007aff" // Alternates between Yellow and Blue
+      );
+    }
+    
+    if (count >= maxFlashes * 2) {
+      clearInterval(highlightInterval);
+      // Finish on yellow highlight
+      if (map.getLayer("selected-feature-layer")) {
+        map.setPaintProperty("selected-feature-layer", "fill-color", "#ffd700");
+      }
+    }
+  }, 200); // Changes color every 200ms
+}
 
 
 
