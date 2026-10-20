@@ -537,14 +537,6 @@ if (!maplibregl.supported()) {
   alert("MapLibre GL is not supported on this mobile browser (WebGL disabled or unavailable).");
 }
 
-// Use viewport width so portrait and landscape phones both keep a full-width map.
-const mobileLayout = window.matchMedia("(max-width: 767px)");
-function updateLayoutOrientation(event) {
-  const isVertical = event ? event.matches : mobileLayout.matches;
-  document.body.classList.toggle("layout-vertical", isVertical);
-  document.body.classList.toggle("layout-horizontal", !isVertical);
-  scheduleMapResize();
-}
-
-mobileLayout.addEventListener("change", updateLayoutOrientation);
-updateLayoutOrientation(); // Run immediately on load
+// Recalculate the map after viewport and device-orientation changes.
+window.addEventListener("resize", scheduleMapResize, { passive: true });
+window.addEventListener("orientationchange", scheduleMapResize, { passive: true });
