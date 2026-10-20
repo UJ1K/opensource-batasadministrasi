@@ -265,7 +265,7 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
     allFeatureLayers.push(lineId);
 
     const labelId = `${layerId}-labels`;
-    const minZoom = level === "subdistrict" ? 11 : 2;
+    const minZoom = level === "subdistrict" ? 9 : 2;
     const maxZoom = level === "subdistrict" ? 18 : 9;
     const labelColors = boundaryLabelPalette();
     const fields = layer.fields || {};
