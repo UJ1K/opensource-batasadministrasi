@@ -466,7 +466,7 @@ map.on("click", (event) => {
     ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
     : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
 
-  // Calculate the center/anchor point of the clicked polygon to place the highlighted label
+  // Update highlighted label source position & text
   const anchor = polygonAnchor(feature.geometry);
   if (anchor) {
     map.getSource("selected-label-source")?.setData({
@@ -478,15 +478,17 @@ map.on("click", (event) => {
       }]
     });
     
-    // Optional: Trigger a quick flash animation on the label text color
     flashLabelEffect();
   }
 
+  // Populate feature card properties & title
   const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
   document.querySelector("#feature-title").textContent = title;
   document.querySelector("#feature-properties").innerHTML = entries.length
     ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
     : `<p class="no-properties">This feature has no additional attributes.</p>`;
+  
+  // CRITICAL: Unhide the card so the download sheet pops up
   featureCard.hidden = false;
 });
 
