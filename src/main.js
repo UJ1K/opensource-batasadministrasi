@@ -116,6 +116,7 @@ const map = new maplibregl.Map({
   attributionControl: false,
   style: {
     version: 8,
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
     sources: {
       osm: {
         type: "raster",
@@ -150,6 +151,21 @@ let exportAbortController;
 
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
+function boundaryLabelPalette() {
+  return theme === "dark"
+    ? { text: "#f5f2e9", halo: "#18221f" }
+    : { text: "#18372c", halo: "#fffef9" };
+}
+
+function labelTextExpression(level, fields = {}) {
+  const candidates = level === "subdistrict"
+    ? ["WADMKC", "KECAMATAN", "NAMOBJ", "NAME_3", "name_3", "name", "NAME_2", "NAME"]
+    : ["NAME_1", "NAMOBJ", "WADMPR", "PROVINSI", "namaprov", "name_1", "name", "NAME"];
+  const actualFields = new Map(Object.keys(fields).map((field) => [field.toLowerCase(), field]));
+  const resolved = [...new Set(candidates.map((field) => actualFields.get(field.toLowerCase()) || field))];
+  return ["coalesce", ...resolved.map((field) => ["get", field]), ""];
+}
+
 function addArchiveLayers(level, sourceId, vectorLayers) {
   for (const layer of vectorLayers) {
     const sourceLayer = layer.id || layer.name;
@@ -180,6 +196,39 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
     });
     featureLayersByLevel[level].push(lineId);
     allFeatureLayers.push(lineId);
+
+    const labelId = `${layerId}-labels`;
+    const minZoom = level === "subdistrict" ? 7 : 2;
+    const maxZoom = level === "subdistrict" ? 18 : 9;
+    const labelColors = boundaryLabelPalette();
+    map.addLayer({
+      id: labelId,
+      source: sourceId,
+      "source-layer": sourceLayer,
+      type: "symbol",
+      minzoom: minZoom,
+      maxzoom: maxZoom,
+      layout: {
+        visibility: activeBoundary === level ? "visible" : "none",
+        "symbol-placement": "point",
+        "text-field": labelTextExpression(level, layer.fields || {}),
+        "text-font": ["Open Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], minZoom, 9, maxZoom, 13],
+        "text-max-width": 9,
+        "text-padding": 3,
+        "text-allow-overlap": false,
+        "text-ignore-placement": false,
+        "symbol-avoid-edges": true
+      },
+      paint: {
+        "text-color": labelColors.text,
+        "text-halo-color": labelColors.halo,
+        "text-halo-width": 1.6,
+        "text-halo-blur": 0.2
+      }
+    });
+    featureLayersByLevel[level].push(labelId);
+    allFeatureLayers.push(labelId);
   }
 }
 
@@ -320,7 +369,11 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
   const dark = theme === "dark";
   map.setPaintProperty("basemap", "raster-opacity", dark ? 0.85 : 1);
   for (const id of allFeatureLayers) {
-    if (map.getLayer(id) && !id.endsWith("-line")) {
+    if (map.getLayer(id) && id.endsWith("-labels")) {
+      const colors = boundaryLabelPalette();
+      map.setPaintProperty(id, "text-color", colors.text);
+      map.setPaintProperty(id, "text-halo-color", colors.halo);
+    } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#70918b" : "#bfcfb9");
       map.setPaintProperty(id, "fill-outline-color", dark ? "#d4a06f" : "#637565");
     } else if (map.getLayer(id)) map.setPaintProperty(id, "line-color", dark ? "#d4a06f" : "#637565");
