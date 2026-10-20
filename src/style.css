@@ -194,10 +194,26 @@ body.layout-vertical .workspace {
   grid-template-areas: 
     "sidebar"
     "map";
-  grid-template-rows: auto minmax(450px, 60vh);
+  grid-template-rows: auto minmax(380px, 60vh);
 }
 body.layout-vertical .map-panel {
   width: 100%;
-  min-height: 450px;
+  min-height: 380px;
   height: 60vh;
+}
+
+@media (max-width: 767px) {
+  .workspace {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "sidebar" "map";
+    grid-template-rows: auto minmax(380px, 60vh);
+    gap: 16px;
+    padding: 16px;
+  }
+  .map-panel {
+    width: 100%;
+    min-height: 380px;
+    height: 60vh;
+  }
 }

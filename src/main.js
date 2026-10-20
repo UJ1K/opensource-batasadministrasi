@@ -136,8 +136,16 @@ const map = new maplibregl.Map({
   }
 });
 
-const mapResizeObserver = new ResizeObserver(() => map.resize());
-mapResizeObserver.observe(map.getContainer());
+let mapResizeFrame = 0;
+function scheduleMapResize() {
+  if (mapResizeFrame) return;
+  mapResizeFrame = requestAnimationFrame(() => {
+    mapResizeFrame = 0;
+    map.resize();
+  });
+}
+const mapResizeObserver = new ResizeObserver(scheduleMapResize);
+mapResizeObserver.observe(document.querySelector(".map-panel"));
 
 const exportButton = document.querySelector("#export-selected");
 const cancelExportButton = document.querySelector("#cancel-export");
@@ -529,18 +537,14 @@ if (!maplibregl.supported()) {
   alert("MapLibre GL is not supported on this mobile browser (WebGL disabled or unavailable).");
 }
 
-// Dynamic Layout Orientation Detector (Vertical vs Horizontal)
-function updateLayoutOrientation() {
-  const isVertical = window.innerHeight > window.innerWidth;
+// Use viewport width so portrait and landscape phones both keep a full-width map.
+const mobileLayout = window.matchMedia("(max-width: 767px)");
+function updateLayoutOrientation(event) {
+  const isVertical = event ? event.matches : mobileLayout.matches;
   document.body.classList.toggle("layout-vertical", isVertical);
   document.body.classList.toggle("layout-horizontal", !isVertical);
-  
-  // Force MapLibre to resize properly when layout shifts
-  if (typeof map !== 'undefined' && map) {
-    window.setTimeout(() => map.resize(), 150);
-  }
+  scheduleMapResize();
 }
 
-window.addEventListener("resize", updateLayoutOrientation);
-window.addEventListener("orientationchange", updateLayoutOrientation);
+mobileLayout.addEventListener("change", updateLayoutOrientation);
 updateLayoutOrientation(); // Run immediately on load
