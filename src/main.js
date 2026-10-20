@@ -423,7 +423,6 @@ boundaryInputs.forEach((input) => input.addEventListener("change", () => {
 
 document.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
 document.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
-document.querySelector("#reset-view").addEventListener("click", () => map.flyTo({ center: [118, -2.2], zoom: 2.5, duration: 900 }));
 document.querySelector("#feature-close").addEventListener("click", () => { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; });
 
 themeButtons.forEach((button) => button.addEventListener("click", () => {

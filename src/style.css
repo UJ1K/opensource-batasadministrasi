@@ -111,10 +111,9 @@ body.intro-playing { overflow: hidden; }
 .map-panel { min-width: 0; min-height: 500px; position: relative; overflow: hidden; border: 1px solid #d2d9d1; background: var(--canvas); }
 #map { position: absolute; inset: 0; }
 .zoom-control { position: absolute; z-index: 2; top: 16px; right: 16px; display: flex; flex-direction: column; border: 1px solid #d5dcd4; background: #fbfcf9f2; }
-.zoom-control button, .locate-control { width: 42px; height: 42px; border: 0; background: transparent; color: #334e40; cursor: pointer; font-size: 20px; }
+.zoom-control button { width: 42px; height: 42px; border: 0; background: transparent; color: #334e40; cursor: pointer; font-size: 20px; }
 .zoom-control span { height: 1px; margin: 0 7px; background: var(--line); }
-.locate-control { position: absolute; z-index: 2; top: 111px; right: 16px; border: 1px solid #d5dcd4; background: #fbfcf9f2; font-size: 21px; }
-.zoom-control button:hover, .locate-control:hover { background: #edf2eb; }
+.zoom-control button:hover { background: #edf2eb; }
 .map-attribution { position: absolute; z-index: 2; right: 8px; bottom: 8px; padding: 5px 7px; background: #fbfcf9e8; color: #45594c; font-size: 9px; letter-spacing: 0; }
 .map-toast { position: absolute; z-index: 2; left: 14px; bottom: 14px; max-width: min(360px, calc(100% - 90px)); padding: 9px 11px; border: 1px solid #d9dfd8; background: #fbfcf9f2; color: #43594b; font-size: 10px; line-height: 1.45; }
 .toast-dot { width: 6px; height: 6px; margin-right: 7px; background: #5c805f; }
@@ -161,8 +160,7 @@ body.intro-playing { overflow: hidden; }
   .segmented { margin-bottom: 16px; }
   .map-panel { height: 58svh; min-height: 390px; }
   .zoom-control { top: 10px; right: 10px; }
-  .zoom-control button, .locate-control { width: 44px; height: 44px; }
-  .locate-control { top: 108px; right: 10px; }
+  .zoom-control button { width: 44px; height: 44px; }
   .map-toast { left: 8px; bottom: 38px; max-width: calc(100% - 88px); padding: 8px; font-size: 9px; }
   .map-attribution { right: 5px; bottom: 5px; font-size: 8px; }
   .feature-card { right: 8px; bottom: 50px; width: calc(100% - 16px); max-height: 58%; padding: 16px; }
