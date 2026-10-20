@@ -31,15 +31,17 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
   const baseScale = 0.92;
   const focusScale = 1.42;
   document.body.classList.add("intro-playing");
+  
   globe = createGlobe(introCanvas, {
-    devicePixelRatio: Math.min(window.devicePixelRatio || 1, compactViewport ? 1 : 1.5),
+    // Optimized for mobile devices to prevent lagging/freezing
+    devicePixelRatio: compactViewport ? 1 : 1.5,
     width: compactViewport ? 560 : 720,
     height: compactViewport ? 560 : 720,
     phi: 0,
     theta: 0.18,
     dark: 1,
     diffuse: 1.15,
-    mapSamples: compactViewport ? 9000 : 12000,
+    mapSamples: compactViewport ? 4000 : 12000, // Lower samples on mobile for better performance
     mapBrightness: 5,
     mapBaseBrightness: 0,
     baseColor: [0.12, 0.20, 0.16],
@@ -49,6 +51,8 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
     scale: 0.92,
     offset: [0, 0]
   });
+  // ... rest of your intro code
+
 
   function closeIntro() {
     if (introClosed) return;
