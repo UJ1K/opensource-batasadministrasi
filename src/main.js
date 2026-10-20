@@ -1,101 +1,12 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
-import createGlobe from "cobe";
 import "./style.css";
 
 const tileUrl = import.meta.env.VITE_PMTILES_URL;
 const subdistrictTileUrl = import.meta.env.VITE_SUBDISTRICT_PMTILES_URL;
-const intro = document.querySelector("#globe-intro");
-const introStatus = document.querySelector("#intro-status");
-const introPhase = document.querySelector("#intro-phase");
-const introCanvas = document.querySelector("#cobe-globe");
-const introStarted = performance.now();
-const spinDuration = 3900;
-const focusDuration = 2100;
-const introDuration = 8200;
-const focusPhi = -(106.85 * Math.PI / 180) - Math.PI / 2;
-const focusTheta = -6.2 * Math.PI / 180;
-
 if (!tileUrl) {
   throw new Error("Missing VITE_PMTILES_URL. Copy .env.example to .env and set the PMTiles archive URL.");
-}
-let introFrame;
-let globe;
-let introClosed = false;
-let indonesiaMarkerAdded = false;
-
-if (intro && introCanvas) {
-  document.body.classList.add("intro-playing");
-  globe = createGlobe(introCanvas, {
-    devicePixelRatio: 1.5,
-    width: 720,
-    height: 720,
-    phi: 0,
-    theta: 0.18,
-    dark: 0,
-    diffuse: 1.2,
-    mapSamples: 16000,
-    mapBrightness: 6,
-    mapBaseBrightness: 0,
-    baseColor: [0.92, 0.93, 0.91],
-    markerColor: [0.72, 0.84, 0.62],
-    glowColor: [0.75, 0.80, 0.73],
-    markers: [],
-    scale: 0.92,
-    offset: [0, 0]
-  });
-
-  function animateIntro(now) {
-    if (introClosed) return;
-    const elapsed = now - introStarted;
-    let phi;
-    let theta = 0.18;
-    if (elapsed < spinDuration) {
-      phi = (elapsed / spinDuration) * Math.PI * 2;
-      introStatus.textContent = introPhase.textContent = "ROTATING · PLANET EARTH";
-    } else if (elapsed < spinDuration + focusDuration) {
-      const progress = Math.min(1, (elapsed - spinDuration) / focusDuration);
-      const eased = progress * progress * (3 - 2 * progress);
-      phi = Math.PI * 2 + (focusPhi - Math.PI * 2) * eased;
-      theta = 0.18 + (focusTheta - 0.18) * eased;
-      introStatus.textContent = introPhase.textContent = "LOCKING ON · INDONESIA";
-      if (progress > 0.72) {
-        intro.classList.add("is-focused");
-        if (!indonesiaMarkerAdded) {
-          indonesiaMarkerAdded = true;
-          globe.update({ markers: [{ location: [-6.2, 106.85], size: 0.055, color: [0.98, 0.45, 0.18], id: "indonesia" }] });
-        }
-      }
-    } else {
-      phi = focusPhi;
-      theta = focusTheta;
-      introStatus.textContent = introPhase.textContent = "INDONESIA · 6° 12′ S, 106° 50′ E";
-      intro.classList.add("is-focused");
-    }
-    globe.update({ phi, theta });
-    const progress = Math.min(100, elapsed / introDuration * 100);
-    intro.style.setProperty("--intro-progress", `${progress}%`);
-    if (elapsed >= introDuration) closeIntro();
-    else introFrame = requestAnimationFrame(animateIntro);
-  }
-
-  function closeIntro() {
-    if (introClosed) return;
-    introClosed = true;
-    cancelAnimationFrame(introFrame);
-    intro.classList.add("is-leaving");
-    window.setTimeout(() => {
-      globe?.destroy();
-      intro.remove();
-      document.body.classList.remove("intro-playing");
-    }, 750);
-  }
-
-  document.querySelector("#intro-skip")?.addEventListener("click", closeIntro);
-  introFrame = requestAnimationFrame(animateIntro);
-} else {
-  intro?.remove();
 }
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -307,7 +218,11 @@ document.querySelector("#feature-close").addEventListener("click", () => { featu
 
 themeButtons.forEach((button) => button.addEventListener("click", () => {
   theme = button.dataset.theme;
-  themeButtons.forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+  themeButtons.forEach((candidate) => {
+    const active = candidate === button;
+    candidate.classList.toggle("active", active);
+    candidate.setAttribute("aria-pressed", String(active));
+  });
   const dark = theme === "dark";
   map.setPaintProperty("basemap", "raster-opacity", dark ? 0.85 : 1);
   for (const id of allFeatureLayers) {
