@@ -528,3 +528,19 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
 if (!maplibregl.supported()) {
   alert("MapLibre GL is not supported on this mobile browser (WebGL disabled or unavailable).");
 }
+
+// Dynamic Layout Orientation Detector (Vertical vs Horizontal)
+function updateLayoutOrientation() {
+  const isVertical = window.innerHeight > window.innerWidth;
+  document.body.classList.toggle("layout-vertical", isVertical);
+  document.body.classList.toggle("layout-horizontal", !isVertical);
+  
+  // Force MapLibre to resize properly when layout shifts
+  if (typeof map !== 'undefined' && map) {
+    window.setTimeout(() => map.resize(), 150);
+  }
+}
+
+window.addEventListener("resize", updateLayoutOrientation);
+window.addEventListener("orientationchange", updateLayoutOrientation);
+updateLayoutOrientation(); // Run immediately on load
