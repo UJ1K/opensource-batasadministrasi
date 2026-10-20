@@ -433,20 +433,27 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
     candidate.classList.toggle("active", active);
     candidate.setAttribute("aria-pressed", String(active));
   });
+  
   const dark = theme === "dark";
-  map.setPaintProperty("basemap", "raster-opacity", dark ? 0.85 : 1);
+  
+  // Toggles the dark class on body to change app UI/UX background & component elements
+  document.body.classList.toggle("dark", dark);
+
+  map.setPaintProperty("basemap", "raster-opacity", dark ? 0.75 : 1);
   for (const id of allFeatureLayers) {
     if (map.getLayer(id) && id.endsWith("-labels")) {
       const colors = boundaryLabelPalette();
       map.setPaintProperty(id, "text-color", colors.text);
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
-      map.setPaintProperty(id, "fill-color", dark ? "#70918b" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#d4a06f" : "#637565");
-    } else if (map.getLayer(id)) map.setPaintProperty(id, "line-color", dark ? "#d4a06f" : "#637565");
+      map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#248a3d" : "#637565");
+      map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
+    } else if (map.getLayer(id)) {
+      map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
+    }
   }
 }));
-
 
 
 
