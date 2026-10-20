@@ -166,3 +166,15 @@ body.dark .segmented button.active { background: #636366; color: #ffffff; }
 .feature-card .feature-export { margin-top: 16px; }
 .feature-card progress { display: block; width: 100%; height: 6px; border-radius: 3px; margin-top: 12px; accent-color: var(--green); overflow: hidden; }
 .feature-card .feature-export-status { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
