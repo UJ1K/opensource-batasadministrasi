@@ -450,7 +450,7 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "fill-outline-color", dark ? "#ff0000" : "#637565");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
-      map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
+      map.setPaintProperty(id, "line-color", dark ? "#ff0000" : "#637565");
     }
   }
 }));
