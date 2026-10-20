@@ -150,12 +150,11 @@ let theme = "light";
 let activeBoundary = "province";
 const archiveBySource = {};
 let exportAbortController;
+let highlightInterval;
 
 function titleCase(value) { return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 function boundaryLabelPalette() {
-  // The basemap remains satellite imagery in both UI themes, so use one stable
-  // high-contrast label treatment over both bright land and dark water tiles.
   return { text: "#ffffff", halo: "#17211de8" };
 }
 
@@ -234,9 +233,9 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       type: "fill",
       layout: { visibility: activeBoundary === level ? "visible" : "none" },
       paint: {
-        "fill-color": theme === "light" ? "#bfcfb9" : "#70918b",
-        "fill-opacity": 0.58,
-        "fill-outline-color": theme === "light" ? "#637565" : "#d4a06f"
+        "fill-color": theme === "light" ? "#bfcfb9" : "#34c759",
+        "fill-opacity": theme === "light" ? 0.58 : 0.45,
+        "fill-outline-color": theme === "light" ? "#637565" : "#248a3d"
       }
     });
     featureLayersByLevel[level].push(layerId);
@@ -248,7 +247,7 @@ function addArchiveLayers(level, sourceId, vectorLayers) {
       "source-layer": sourceLayer,
       type: "line",
       layout: { visibility: activeBoundary === level ? "visible" : "none" },
-      paint: { "line-color": theme === "light" ? "#637565" : "#d4a06f", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
+      paint: { "line-color": theme === "light" ? "#637565" : "#248a3d", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.45, 8, 1.15] }
     });
     featureLayersByLevel[level].push(lineId);
     allFeatureLayers.push(lineId);
@@ -331,7 +330,7 @@ map.on("load", async () => {
     initializeArchive("subdistrict", "subdistrict", subdistrictTileUrl)
   ]);
 
-  // --- ADD HIGHLIGHT SOURCE & LAYERS HERE ---
+  // Add click-highlight sources and layers
   map.addSource("selected-feature-source", {
     type: "geojson",
     data: { type: "FeatureCollection", features: [] }
@@ -356,9 +355,34 @@ map.on("load", async () => {
       "line-width": 2.5
     }
   });
-  // ------------------------------------------
 });
 map.on("idle", refreshBoundaryLabels);
+
+function flashHighlightEffect() {
+  if (highlightInterval) clearInterval(highlightInterval);
+  
+  let count = 0;
+  const maxFlashes = 4; // Blinks 4 times
+  
+  highlightInterval = setInterval(() => {
+    count++;
+    const isYellow = count % 2 === 1;
+    if (map.getLayer("selected-feature-layer")) {
+      map.setPaintProperty(
+        "selected-feature-layer", 
+        "fill-color", 
+        isYellow ? "#ffd700" : "#007aff"
+      );
+    }
+    
+    if (count >= maxFlashes * 2) {
+      clearInterval(highlightInterval);
+      if (map.getLayer("selected-feature-layer")) {
+        map.setPaintProperty("selected-feature-layer", "fill-color", "#ffd700");
+      }
+    }
+  }, 200);
+}
 
 exportButton.addEventListener("click", async () => {
   if (!latestFeature) return;
@@ -419,7 +443,6 @@ map.on("click", (event) => {
     featureCard.hidden = true; 
     latestFeature = null; 
     exportButton.disabled = true; 
-    // Clear highlight if clicked outside
     map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
     return; 
   }
@@ -428,16 +451,23 @@ map.on("click", (event) => {
   exportButton.disabled = false;
   exportStatus.textContent = "";
 
-  // --- UPDATE HIGHLIGHT GEOMETRY & RUN BLINK ANIMATION ---
   map.getSource("selected-feature-source")?.setData({
     type: "FeatureCollection",
     features: [feature]
   });
-
   flashHighlightEffect();
-  // ------------------------------------------------------
 
   const props = feature.properties || {};
+  const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
+  const title = activeBoundary === "subdistrict"
+    ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
+    : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
+  document.querySelector("#feature-title").textContent = title;
+  document.querySelector("#feature-properties").innerHTML = entries.length
+    ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
+    : `<p class="no-properties">This feature has no additional attributes.</p>`;
+  featureCard.hidden = false;
+});
 
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
 
@@ -455,11 +485,17 @@ boundaryInputs.forEach((input) => input.addEventListener("change", () => {
   featureCard.hidden = true;
   latestFeature = null;
   exportButton.disabled = true;
+  map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
 }));
 
 document.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
 document.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
-document.querySelector("#feature-close").addEventListener("click", () => { featureCard.hidden = true; latestFeature = null; exportButton.disabled = true; });
+document.querySelector("#feature-close").addEventListener("click", () => { 
+  featureCard.hidden = true; 
+  latestFeature = null; 
+  exportButton.disabled = true; 
+  map.getSource("selected-feature-source")?.setData({ type: "FeatureCollection", features: [] });
+});
 
 themeButtons.forEach((button) => button.addEventListener("click", () => {
   theme = button.dataset.theme;
@@ -470,8 +506,6 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
   });
   
   const dark = theme === "dark";
-  
-  // Toggles the dark class on body to change app UI/UX background & component elements
   document.body.classList.toggle("dark", dark);
 
   map.setPaintProperty("basemap", "raster-opacity", dark ? 0.75 : 1);
@@ -482,61 +516,10 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
       map.setPaintProperty(id, "text-halo-color", colors.halo);
     } else if (map.getLayer(id) && !id.endsWith("-line")) {
       map.setPaintProperty(id, "fill-color", dark ? "#34c759" : "#bfcfb9");
-      map.setPaintProperty(id, "fill-outline-color", dark ? "#ff0000" : "#637565");
+      map.setPaintProperty(id, "fill-outline-color", dark ? "#248a3d" : "#637565");
       map.setPaintProperty(id, "fill-opacity", dark ? 0.45 : 0.58);
     } else if (map.getLayer(id)) {
-      map.setPaintProperty(id, "line-color", dark ? "#ff0000" : "#637565");
+      map.setPaintProperty(id, "line-color", dark ? "#248a3d" : "#637565");
     }
   }
 }));
-
-
-let highlightInterval;
-
-function flashHighlightEffect() {
-  if (highlightInterval) clearInterval(highlightInterval);
-  
-  let count = 0;
-  const maxFlashes = 4; // Blinks 4 times
-  
-  highlightInterval = setInterval(() => {
-    count++;
-    const isYellow = count % 2 === 1;
-    if (map.getLayer("selected-feature-layer")) {
-      map.setPaintProperty(
-        "selected-feature-layer", 
-        "fill-color", 
-        isYellow ? "#ffd700" : "#007aff" // Alternates between Yellow and Blue
-      );
-    }
-    
-    if (count >= maxFlashes * 2) {
-      clearInterval(highlightInterval);
-      // Finish on yellow highlight
-      if (map.getLayer("selected-feature-layer")) {
-        map.setPaintProperty("selected-feature-layer", "fill-color", "#ffd700");
-      }
-    }
-  }, 200); // Changes color every 200ms
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
