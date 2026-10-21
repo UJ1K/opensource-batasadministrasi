@@ -10,8 +10,8 @@
   <body>
     <main class="shell">
       <section class="globe-hero" id="globe-intro" aria-label="Animasi pembuka peta Indonesia">
-        <p class="intro-kicker"><span aria-hidden="true"></span>DATA WILAYAH INDONESIA</p>
-        <h1 class="hero-title">Opensource Project<br><em>Geodataspatial</em></h1>
+        <p class="intro-kicker">DATA WILAYAH INDONESIA</p>
+        <h1 class="hero-title">Opensource Project<br><em>Geodataspatial Indonesia</em></h1>
         <div class="intro-globe">
           <canvas id="cobe-globe" aria-label="Globe berputar dan menyorot Indonesia"></canvas>
           <span class="globe-pin" aria-hidden="true"></span>
@@ -26,11 +26,11 @@
           <h1>Batas Administrasi Indonesia</h1>
           <p class="intro">Batas administrasi Indonesia untuk kebutuhan analisis geografis.</p>
           <div class="rule"></div>
-          <div class="section-label">Lapisan batas</div>
+          <div class="section-label">Layer Shapefile</div>
           <label class="layer-row"><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6.5 12 3l8 3.5v11L12 21l-8-3.5z"/><path d="m4 6.5 8 4 8-4M12 10.5V21"/></svg></span><span class="layer-copy"><b>Batas Provinsi</b><small>Shapefile batas administrasi provinsi satu Indonesia</small></span><input id="layer-toggle" type="radio" name="boundary-level" value="province" checked><span class="switch" aria-hidden="true"></span></label>
           <label class="layer-row"><span class="layer-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h7v6H4zM13 5h7v4h-7zM13 11h7v8h-7zM4 13h7v6H4z"/></svg></span><span class="layer-copy"><b>Batas Kecamatan</b><small>Shapefile batas administrasi kecamatan satu Indonesia</small></span><input id="subdistrict-toggle" type="radio" name="boundary-level" value="subdistrict" disabled><span class="switch" aria-hidden="true"></span></label>
           <div class="rule"></div>
-          <div class="section-label">Tampilan</div>
+          <div class="section-label">Visual Tema</div>
           <div class="segmented" role="group" aria-label="Tampilan peta"><button class="active" data-theme="light" aria-pressed="true">Terang</button><button data-theme="dark" aria-pressed="false">Gelap</button></div>
           <div class="rule"></div>
           <div class="section-label">Tentang data</div>
@@ -41,7 +41,7 @@
         <section class="map-panel" aria-label="Peta interaktif Indonesia">
           <div id="map"></div>
           <div class="zoom-control" aria-label="Map zoom controls"><button id="zoom-in" aria-label="Zoom in">+</button><span></span><button id="zoom-out" aria-label="Zoom out">−</button></div>
-          <div class="map-attribution">Peta dasar © Esri · Batas © OpenStreetMap contributors</div>
+          <div class="map-attribution">Peta dasar © Esri ·  © OpenStreetMap contributors</div>
           <div class="feature-card" id="feature-card" hidden><button class="feature-close" id="feature-close" aria-label="Tutup detail wilayah">×</button><span class="eyebrow">WILAYAH TERPILIH</span><h2 id="feature-title">Wilayah</h2><div class="feature-properties" id="feature-properties"></div><button class="export-button feature-export" id="export-selected" type="button" disabled>Unduh wilayah terpilih</button><button class="export-cancel" id="cancel-export" type="button" hidden>Batalkan unduhan</button><progress id="export-progress" max="1" value="0" hidden></progress><p class="feature-export-status" id="export-status" aria-live="polite"></p></div>
         </section>
       </section>
