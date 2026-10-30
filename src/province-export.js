@@ -6,7 +6,9 @@ const PROVINCE_NAME_FIELDS = [
   "namaprov", "prov_name", "name_1", "nama_prov", "wadmpr", "prov", "name"
 ];
 
-export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
+export async function createProvinceShapefile(archive, layerId, selectedFeatures, { signal, onProgress } = {}) {
+  if (!Array.isArray(selectedFeatures)) selectedFeatures = [selectedFeatures];
+  if (!selectedFeatures.length) throw new Error("Select at least one area to export.");
   const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, { zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
@@ -32,7 +34,7 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
   const maxZoom = Math.min(header.maxZoom, Number(sourceLayer.maxzoom ?? header.maxZoom));
   if (minZoom > maxZoom) throw new Error("The selected layer has no available zoom levels.");
   const zoom = maxZoom;
-  const tiles = await findFeatureTiles(archive, selectedFeature, layerId, minZoom, zoom, bounds, { signal, onProgress });
+  const tiles = await findFeatureTiles(archive, selectedFeatures, layerId, minZoom, zoom, bounds, { signal, onProgress });
   if (!tiles.length) throw new Error("No source tiles were found for the selected area at the archive's highest detail zoom.");
   if (tiles.length > MAX_EXPORT_TILES) {
     throw new Error(`The selected area needs ${tiles.length.toLocaleString()} source tiles at zoom ${zoom}, above this browser export's ${MAX_EXPORT_TILES.toLocaleString()} tile limit. The archive's full detail can't be safely assembled in this browser.`);
@@ -58,7 +60,7 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
             if (vectorFeature.type !== 3) continue;
             const feature = vectorFeature.toGeoJSON(tile.x, tile.y, zoom);
             if (!feature.geometry || !["Polygon", "MultiPolygon"].includes(feature.geometry.type)) continue;
-            if (!matchesSelectedFeature(feature, selectedFeature)) continue;
+            if (!matchesAnySelectedFeature(feature, selectedFeatures)) continue;
             const key = provinceGroupKey(feature, nameField);
             let group = groups.get(key);
             if (!group) {
@@ -112,13 +114,16 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
     [`${baseName}.prj`]: strToU8('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'),
     [`${baseName}.cpg`]: strToU8("UTF-8\n")
   }, { level: 0 });
-  const name = getFeatureName(selectedFeature?.properties || features[0].properties);
-  const fileName = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area";
+  const names = selectedFeatures.map((feature) => getFeatureName(feature.properties || {}));
+  const name = selectedFeatures.length === 1 ? names[0] : `${selectedFeatures.length} selected areas`;
+  const fileName = selectedFeatures.length === 1
+    ? names[0].normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area"
+    : `selected_areas_${selectedFeatures.length}`;
   onProgress?.({ stage: "Ready", completed: 1, total: 1, count: features.length });
   return { blob: new Blob([zipBytes], { type: "application/zip" }), count: features.length, zoom, name, fileName };
 }
 
-async function findFeatureTiles(archive, selectedFeature, layerId, minZoom, maxZoom, bounds, { signal, onProgress } = {}) {
+async function findFeatureTiles(archive, selectedFeatures, layerId, minZoom, maxZoom, bounds, { signal, onProgress } = {}) {
   const [{ VectorTile }, { PbfReader }] = await Promise.all([import("@mapbox/vector-tile"), import("pbf")]);
   // Locate the feature at a useful intermediate zoom, where the national tile
   // range stays practical and small islands are less likely to be generalized away.
@@ -143,7 +148,7 @@ async function findFeatureTiles(archive, selectedFeature, layerId, minZoom, maxZ
       if (layer) {
         for (let index = 0; index < layer.length; index += 1) {
           const feature = layer.feature(index);
-          if (feature.type === 3 && matchesSelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeature)) {
+          if (feature.type === 3 && matchesAnySelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeatures)) {
             matched.push(feature.toGeoJSON(tile.x, tile.y, coarseZoom));
           }
         }
@@ -155,18 +160,24 @@ async function findFeatureTiles(archive, selectedFeature, layerId, minZoom, maxZ
   await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, () => readCoarse()));
   if (!matched.length) return [];
 
-  const extent = geometryBounds(matched.map((feature) => feature.geometry).filter(Boolean));
-  if (!extent) return [];
   // A one coarse-tile margin catches detached pieces near the outer edge while
-  // keeping the maximum-zoom read focused on the selected area.
+  // keeping maximum-zoom reads focused around each selected area.
   const margin = 360 / (2 ** coarseZoom);
-  const highDetailBounds = {
-    minLon: Math.max(bounds.minLon, extent.minLon - margin),
-    minLat: Math.max(bounds.minLat, extent.minLat - margin),
-    maxLon: Math.min(bounds.maxLon, extent.maxLon + margin),
-    maxLat: Math.min(bounds.maxLat, extent.maxLat + margin)
-  };
-  const highDetailTiles = tilesForBounds(highDetailBounds, maxZoom);
+  const highDetailTileMap = new Map();
+  for (const feature of matched) {
+    const extent = geometryBounds([feature.geometry].filter(Boolean));
+    if (!extent) continue;
+    const localBounds = {
+      minLon: Math.max(bounds.minLon, extent.minLon - margin),
+      minLat: Math.max(bounds.minLat, extent.minLat - margin),
+      maxLon: Math.min(bounds.maxLon, extent.maxLon + margin),
+      maxLat: Math.min(bounds.maxLat, extent.maxLat + margin)
+    };
+    for (const tile of tilesForBounds(localBounds, maxZoom)) highDetailTileMap.set(`${tile.x}/${tile.y}`, tile);
+    if (highDetailTileMap.size > MAX_CANDIDATE_TILES) throw new Error("The selected areas' full-detail coverage is too large for a browser export.");
+  }
+  const highDetailTiles = [...highDetailTileMap.values()];
+  if (!highDetailTiles.length) return [];
   if (highDetailTiles.length > MAX_CANDIDATE_TILES) throw new Error("This selected area's full-detail coverage is too large for a browser export.");
 
   // Eliminate empty coordinates from the candidate rectangle by retaining only
@@ -185,7 +196,7 @@ async function findFeatureTiles(archive, selectedFeature, layerId, minZoom, maxZ
       if (!layer) continue;
       for (let index = 0; index < layer.length; index += 1) {
         const feature = layer.feature(index);
-        if (feature.type === 3 && matchesSelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeature)) {
+        if (feature.type === 3 && matchesAnySelectedFeature({ properties: feature.properties, id: feature.id }, selectedFeatures)) {
           present.push({ ...tile, data: response.data });
           if (present.length > MAX_EXPORT_TILES) {
             throw new Error(`The selected area needs more than ${MAX_EXPORT_TILES.toLocaleString()} source tiles at zoom ${maxZoom}, above this browser export's safe tile limit.`);
@@ -253,12 +264,14 @@ function cleanPolygon(polygon) {
   return rings.length ? rings : null;
 }
 
-function matchesSelectedFeature(candidate, selected) {
-  if (!selected) return false;
-  const target = selected.properties || {};
-  const entries = Object.entries(target).filter(([, value]) => value != null && ["string", "number", "boolean"].includes(typeof value));
-  if (!entries.length && selected.id != null) return String(candidate.id) === String(selected.id);
-  return entries.length > 0 && entries.every(([key, value]) => String(candidate.properties?.[key] ?? "") === String(value));
+function matchesAnySelectedFeature(candidate, selectedFeatures) {
+  return selectedFeatures.some((selected) => {
+    if (!selected) return false;
+    const target = selected.properties || {};
+    const entries = Object.entries(target).filter(([, value]) => value != null && ["string", "number", "boolean"].includes(typeof value));
+    if (!entries.length && selected.id != null) return String(candidate.id) === String(selected.id);
+    return entries.length > 0 && entries.every(([key, value]) => String(candidate.properties?.[key] ?? "") === String(value));
+  });
 }
 
 function getFeatureName(properties) {

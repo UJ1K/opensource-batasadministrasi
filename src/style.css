@@ -149,6 +149,7 @@ body.dark .segmented button.active { background: #636366; color: #ffffff; }
 .zoom-control button { width: 44px; height: 44px; border: 0; background: transparent; color: var(--ink); cursor: pointer; font-size: 20px; transition: background 0.15s ease; }
 .zoom-control span { height: 1px; margin: 0 8px; background: var(--line); }
 .zoom-control button:hover { background: var(--accent-soft); }
+.zoom-control button.active { background: var(--accent-soft); color: var(--accent); }
 
 .map-attribution { position: absolute; z-index: 2; right: 12px; bottom: 12px; padding: 6px 10px; border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 10px; letter-spacing: 0; border: 1px solid var(--line); }
 

@@ -95,7 +95,7 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
       theta = focusTheta;
       intro.classList.add("is-focused");
       globe.update({ phi, theta, scale: focusScale });
-      introStatus.textContent = introPhase.textContent = "INDONESIA · 6° 12′ S, 106° 50′ E";
+      introStatus.textContent = introPhase.textContent = "INDONESIA Â· 6Â° 12â€² S, 106Â° 50â€² E";
     }
     if (elapsed < spinDuration + focusDuration) globe.update({ phi, theta, scale: baseScale });
     intro.style.setProperty("--intro-progress", `${Math.min(100, elapsed / introDuration * 100)}%`);
@@ -129,7 +129,7 @@ const map = new maplibregl.Map({
         type: "raster",
         tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
         tileSize: 256,
-        attribution: "Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+        attribution: "Tiles Â© Esri, Maxar, Earthstar Geographics, and the GIS User Community"
       },
       admin: { type: "vector", url: `pmtiles://${tileUrl}`, attribution: "Indonesia provincial boundaries" },
       ...(subdistrictTileUrl ? { subdistrict: { type: "vector", url: `pmtiles://${subdistrictTileUrl}`, attribution: "Indonesia subdistrict boundaries" } } : {})
@@ -150,6 +150,7 @@ const mapResizeObserver = new ResizeObserver(scheduleMapResize);
 mapResizeObserver.observe(document.querySelector(".map-panel"));
 
 const exportButton = document.querySelector("#export-selected");
+const multiSelectButton = document.querySelector("#toggle-multi-select");
 const cancelExportButton = document.querySelector("#cancel-export");
 const exportProgress = document.querySelector("#export-progress");
 const exportStatus = document.querySelector("#export-status");
@@ -159,7 +160,8 @@ const boundaryInputs = [...document.querySelectorAll('input[name="boundary-level
 const featureLayersByLevel = { province: [], subdistrict: [] };
 const allFeatureLayers = [];
 const boundaryLabelSources = [];
-let latestFeature = null;
+let selectedFeatures = [];
+let multiSelectEnabled = false;
 let theme = "light";
 let activeBoundary = "province";
 const archiveBySource = {};
@@ -392,7 +394,8 @@ function flashLabelEffect() {
 }
 
 exportButton.addEventListener("click", async () => {
-  if (!latestFeature) return;
+  if (!selectedFeatures.length) return;
+  const featuresToExport = [...selectedFeatures];
   exportAbortController = new AbortController();
   exportButton.disabled = true;
   cancelExportButton.hidden = false;
@@ -401,11 +404,11 @@ exportButton.addEventListener("click", async () => {
   exportProgress.max = 1;
   try {
     const { createProvinceShapefile } = await import("./province-export.js");
-    const archive = archiveBySource[latestFeature.source];
+    const archive = archiveBySource[featuresToExport[0].source];
     if (!archive) throw new Error("The selected boundary archive is unavailable.");
-    const sourceLayer = latestFeature.sourceLayer || latestFeature.layer?.['source-layer'];
+    const sourceLayer = featuresToExport[0].sourceLayer || featuresToExport[0].layer?.["source-layer"];
     if (!sourceLayer) throw new Error("Could not identify the selected feature's source layer.");
-    const result = await createProvinceShapefile(archive, sourceLayer, latestFeature, {
+    const result = await createProvinceShapefile(archive, sourceLayer, featuresToExport, {
       signal: exportAbortController.signal,
       onProgress: ({ stage, completed, total, count }) => {
         exportStatus.textContent = count ? `Preparing ${count} records…` : `${stage} · ${completed} of ${total}`;
@@ -425,7 +428,7 @@ exportButton.addEventListener("click", async () => {
     else exportStatus.textContent = error.message || "Export failed.";
   } finally {
     exportAbortController = undefined;
-    exportButton.disabled = !latestFeature;
+    exportButton.disabled = !selectedFeatures.length;
     cancelExportButton.hidden = true;
     exportProgress.hidden = true;
   }
@@ -433,58 +436,108 @@ exportButton.addEventListener("click", async () => {
 
 cancelExportButton.addEventListener("click", () => exportAbortController?.abort());
 
+multiSelectButton.addEventListener("click", () => {
+  multiSelectEnabled = !multiSelectEnabled;
+  multiSelectButton.setAttribute("aria-pressed", String(multiSelectEnabled));
+  multiSelectButton.classList.toggle("active", multiSelectEnabled);
+  multiSelectButton.title = multiSelectEnabled ? "Multiple selection is on" : "Select multiple areas";
+  if (multiSelectEnabled) {
+    selectedFeatures = [];
+    document.querySelector("#feature-title").textContent = "Select areas on the map";
+    document.querySelector("#feature-properties").innerHTML = '<p class="no-properties">Click one or more areas. Click an area again to remove it.</p>';
+    featureCard.hidden = false;
+    exportButton.disabled = true;
+    exportButton.textContent = "Download selected areas";
+    exportStatus.textContent = "Click areas to add them to your selection.";
+    updateSelectedHighlight();
+  } else renderSelectedFeatures();
+});
+
 map.on("click", (event) => {
   const fillLayers = featureLayersByLevel[activeBoundary].filter((id) => map.getLayer(id) && !id.endsWith("-line") && !id.endsWith("-labels"));
   if (!fillLayers.length) return;
   const feature = map.queryRenderedFeatures(event.point, { layers: fillLayers })[0];
-  
-  if (!feature) { 
-    featureCard.hidden = true; 
-    latestFeature = null; 
-    exportButton.disabled = true; 
-    map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
-    return; 
+  if (!feature) {
+    if (multiSelectEnabled) return;
+    selectedFeatures = [];
+    featureCard.hidden = true;
+    exportButton.disabled = true;
+    updateSelectedHighlight();
+    return;
   }
-  
-  latestFeature = feature;
-  exportButton.disabled = false;
-  exportStatus.textContent = "";
 
+  if (multiSelectEnabled) {
+    const key = selectionKey(feature);
+    const existingIndex = selectedFeatures.findIndex((selected) => selectionKey(selected) === key);
+    if (existingIndex >= 0) selectedFeatures.splice(existingIndex, 1);
+    else selectedFeatures.push(feature);
+  } else {
+    selectedFeatures = [feature];
+  }
+  renderSelectedFeatures();
+});
+
+document.querySelector("#feature-close").addEventListener("click", () => {
+  featureCard.hidden = true;
+  selectedFeatures = [];
+  exportButton.disabled = true;
+  updateSelectedHighlight();
+});
+
+function selectionKey(feature) {
+  return `${feature.source}|${feature.sourceLayer || feature.layer?.["source-layer"] || ""}|${JSON.stringify(feature.properties || {})}`;
+}
+
+function featureName(feature) {
   const props = feature.properties || {};
-  const title = activeBoundary === "subdistrict"
+  return activeBoundary === "subdistrict"
     ? props.WADMKC || props.KECAMATAN || props.NAMOBJ || props.NAME_3 || props.name_3 || props.name || props.NAME_2 || "Subdistrict area"
     : props.NAME_1 || props.name || props.NAME || props.name_en || props.admin || props.shapeName || "Administrative area";
+}
 
-  const anchor = polygonAnchor(feature.geometry);
-  if (anchor) {
-    map.getSource("selected-label-source")?.setData({
-      type: "FeatureCollection",
-      features: [{
-        type: "Feature",
-        properties: { label: title },
-        geometry: { type: "Point", coordinates: anchor.point }
-      }]
-    });
-    
-    flashLabelEffect();
+function updateSelectedHighlight() {
+  const features = selectedFeatures.flatMap((feature) => {
+    const anchor = polygonAnchor(feature.geometry);
+    return anchor ? [{ type: "Feature", properties: { label: featureName(feature) }, geometry: { type: "Point", coordinates: anchor.point } }] : [];
+  });
+  map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features });
+  if (features.length) flashLabelEffect();
+}
+
+function renderSelectedFeatures() {
+  exportButton.disabled = selectedFeatures.length === 0;
+  if (!selectedFeatures.length) {
+    if (multiSelectEnabled) {
+      document.querySelector("#feature-title").textContent = "Select areas on the map";
+      document.querySelector("#feature-properties").innerHTML = '<p class="no-properties">Click one or more areas. Click an area again to remove it.</p>';
+      exportButton.textContent = "Download selected areas";
+      featureCard.hidden = false;
+    } else {
+      featureCard.hidden = true;
+    }
+    return;
   }
-
-  const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
+  const title = selectedFeatures.length === 1 ? featureName(selectedFeatures[0]) : `${selectedFeatures.length} areas selected`;
   document.querySelector("#feature-title").textContent = title;
-  document.querySelector("#feature-properties").innerHTML = entries.length
-    ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
-    : `<p class="no-properties">This feature has no additional attributes.</p>`;
-  
-  // Ensure the popup sheet card shows up
+  const details = document.querySelector("#feature-properties");
+  if (multiSelectEnabled || selectedFeatures.length > 1) {
+    details.innerHTML = selectedFeatures.map((feature) => `<div class="property-row"><span>${escapeHtml(String(featureName(feature)))}</span><b>${escapeHtml(String(feature.sourceLayer || feature.layer?.["source-layer"] || ""))}</b></div>`).join("");
+    exportButton.textContent = `Download ${selectedFeatures.length} selected areas`;
+    exportStatus.textContent = multiSelectEnabled
+      ? "Click another area to add it, or click a selected area to remove it."
+      : "Multiple selected areas are ready to download.";
+  } else {
+    const props = selectedFeatures[0].properties || {};
+    const entries = Object.entries(props).filter(([, value]) => value != null && String(value).length < 220).slice(0, 12);
+    details.innerHTML = entries.length
+      ? entries.map(([key, value]) => `<div class="property-row"><span>${escapeHtml(titleCase(key))}</span><b>${escapeHtml(String(value))}</b></div>`).join("")
+      : `<p class="no-properties">This feature has no additional attributes.</p>`;
+    exportButton.textContent = "Unduh wilayah terpilih";
+    exportStatus.textContent = "";
+  }
   featureCard.hidden = false;
-});
-
-document.querySelector("#feature-close").addEventListener("click", () => { 
-  featureCard.hidden = true; 
-  latestFeature = null; 
-  exportButton.disabled = true; 
-  map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
-});
+  updateSelectedHighlight();
+}
 
 function escapeHtml(value) { return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]); }
 
@@ -500,7 +553,11 @@ boundaryInputs.forEach((input) => input.addEventListener("change", () => {
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", level === activeBoundary ? "visible" : "none");
   }
   featureCard.hidden = true;
-  latestFeature = null;
+  selectedFeatures = [];
+  multiSelectEnabled = false;
+  multiSelectButton.setAttribute("aria-pressed", "false");
+  multiSelectButton.classList.remove("active");
+  multiSelectButton.title = "Select multiple areas";
   exportButton.disabled = true;
   map.getSource("selected-label-source")?.setData({ type: "FeatureCollection", features: [] });
 }));
