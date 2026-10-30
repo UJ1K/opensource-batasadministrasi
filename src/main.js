@@ -1,5 +1,6 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as maplibregl from "maplibre-gl";
+import mapLibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { Protocol } from "pmtiles";
 import createGlobe from "cobe";
 import "./style.css";
@@ -109,6 +110,7 @@ if (intro && introCanvas && !prefersReducedMotion.matches) {
 }
 const protocol = new Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
+maplibregl.setWorkerUrl(mapLibreWorkerUrl);
 
 const app = document.querySelector("#app");
 const map = new maplibregl.Map({
