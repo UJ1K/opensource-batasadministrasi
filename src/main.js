@@ -535,7 +535,8 @@ themeButtons.forEach((button) => button.addEventListener("click", () => {
   }
 }));
 
-if (!maplibregl.supported()) {
+const webglSupported = Boolean(document.createElement("canvas").getContext("webgl2"));
+if (!webglSupported) {
   alert("MapLibre GL is not supported on this mobile browser (WebGL disabled or unavailable).");
 }
 
