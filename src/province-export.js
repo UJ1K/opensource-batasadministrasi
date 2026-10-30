@@ -7,7 +7,7 @@ const PROVINCE_NAME_FIELDS = [
 ];
 
 export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
-  const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, { zip: writeShapefileZip }, { unzipSync, zipSync, strToU8 }] = await Promise.all([
+  const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, shpWrite, { zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
     import("polygon-clipping"),
@@ -104,18 +104,24 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
     features: features.map((feature) => ({ ...feature, properties: properties(feature.properties) }))
   };
   onProgress?.({ stage: "Creating Shapefile ZIP", completed: 0, total: 1 });
-  const shpZip = await writeShapefileZip(collection, {
-    folder: "indonesia_provinces",
-    outputType: "uint8array",
-    compression: "STORE",
-    types: { polygon: "indonesia_provinces" },
-    prj: 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'
+  const writeShapefile = shpWrite.write || shpWrite.default?.write;
+  if (typeof writeShapefile !== "function") throw new Error("The Shapefile writer is unavailable in this browser.");
+  const components = await new Promise((resolve, reject) => {
+    writeShapefile(
+      collection.features.map((feature) => feature.properties),
+      "POLYGON",
+      collection.features.map((feature) => feature.geometry.coordinates),
+      (error, result) => error ? reject(error) : resolve(result)
+    );
   });
-  const files = unzipSync(shpZip);
-  const shpPath = Object.keys(files).find((path) => path.toLowerCase().endsWith(".shp"));
-  if (!shpPath) throw new Error("The Shapefile writer did not create a .shp file.");
-  files[shpPath.replace(/\.shp$/i, ".cpg")] = strToU8("UTF-8\n");
-  const zipBytes = zipSync(files, { level: 0 });
+  const baseName = "indonesia_provinces";
+  const zipBytes = zipSync({
+    [`${baseName}.shp`]: new Uint8Array(components.shp.buffer),
+    [`${baseName}.shx`]: new Uint8Array(components.shx.buffer),
+    [`${baseName}.dbf`]: toUint8Array(components.dbf),
+    [`${baseName}.prj`]: strToU8('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'),
+    [`${baseName}.cpg`]: strToU8("UTF-8\n")
+  }, { level: 0 });
   const name = getFeatureName(selectedFeature?.properties || features[0].properties);
   const fileName = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "selected_area";
   onProgress?.({ stage: "Ready", completed: 1, total: 1, count: features.length });
@@ -319,3 +325,10 @@ function toDbfValue(value) {
 }
 
 function normalizeKey(value) { return String(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+function toUint8Array(value) {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  return new Uint8Array(value);
+}
