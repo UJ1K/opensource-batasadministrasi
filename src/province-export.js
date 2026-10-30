@@ -7,11 +7,10 @@ const PROVINCE_NAME_FIELDS = [
 ];
 
 export async function createProvinceShapefile(archive, layerId, selectedFeature, { signal, onProgress } = {}) {
-  const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, shpWrite, { zipSync, strToU8 }] = await Promise.all([
+  const [{ VectorTile }, { PbfReader }, { default: polygonClipping }, { zipSync, strToU8 }] = await Promise.all([
     import("@mapbox/vector-tile"),
     import("pbf"),
     import("polygon-clipping"),
-    import("@mapbox/shp-write"),
     import("fflate")
   ]);
 
@@ -104,21 +103,12 @@ export async function createProvinceShapefile(archive, layerId, selectedFeature,
     features: features.map((feature) => ({ ...feature, properties: properties(feature.properties) }))
   };
   onProgress?.({ stage: "Creating Shapefile ZIP", completed: 0, total: 1 });
-  const writeShapefile = shpWrite.write || shpWrite.default?.write;
-  if (typeof writeShapefile !== "function") throw new Error("The Shapefile writer is unavailable in this browser.");
-  const components = await new Promise((resolve, reject) => {
-    writeShapefile(
-      collection.features.map((feature) => feature.properties),
-      "POLYGON",
-      collection.features.map((feature) => feature.geometry.coordinates),
-      (error, result) => error ? reject(error) : resolve(result)
-    );
-  });
+  const components = createShapefileComponents(collection.features);
   const baseName = "indonesia_provinces";
   const zipBytes = zipSync({
-    [`${baseName}.shp`]: new Uint8Array(components.shp.buffer),
-    [`${baseName}.shx`]: new Uint8Array(components.shx.buffer),
-    [`${baseName}.dbf`]: toUint8Array(components.dbf),
+    [`${baseName}.shp`]: components.shp,
+    [`${baseName}.shx`]: components.shx,
+    [`${baseName}.dbf`]: components.dbf,
     [`${baseName}.prj`]: strToU8('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]'),
     [`${baseName}.cpg`]: strToU8("UTF-8\n")
   }, { level: 0 });
@@ -326,9 +316,108 @@ function toDbfValue(value) {
 
 function normalizeKey(value) { return String(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
-function toUint8Array(value) {
-  if (value instanceof Uint8Array) return value;
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-  return new Uint8Array(value);
+function createShapefileComponents(features) {
+  const encoder = new TextEncoder();
+  const geometries = features.map((feature) => feature.geometry.coordinates);
+  const allPoints = geometries.flat(2);
+  const bounds = allPoints.reduce((result, [x, y]) => ({
+    minX: Math.min(result.minX, x), minY: Math.min(result.minY, y),
+    maxX: Math.max(result.maxX, x), maxY: Math.max(result.maxY, y)
+  }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+  const records = geometries.map((polygons) => {
+    const rings = polygons.flatMap((polygon) => polygon);
+    const points = rings.flat();
+    return { rings, points, bounds: points.reduce((result, [x, y]) => ({
+      minX: Math.min(result.minX, x), minY: Math.min(result.minY, y),
+      maxX: Math.max(result.maxX, x), maxY: Math.max(result.maxY, y)
+    }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }) };
+  });
+
+  const shpRecordBytes = records.map((record) => 4 + 32 + 4 + 4 + 4 * record.rings.length + 16 * record.points.length);
+  const shpSize = 100 + shpRecordBytes.reduce((sum, size) => sum + 8 + size, 0);
+  const shxSize = 100 + records.length * 8;
+  const shp = new Uint8Array(shpSize);
+  const shx = new Uint8Array(shxSize);
+  writeShapeHeader(shp, shpSize, bounds);
+  writeShapeHeader(shx, shxSize, bounds);
+  const shpView = new DataView(shp.buffer);
+  const shxView = new DataView(shx.buffer);
+  let shpOffset = 100;
+  let shxOffset = 100;
+  let recordOffsetWords = 50;
+  records.forEach((record, index) => {
+    const contentBytes = shpRecordBytes[index];
+    shpView.setInt32(shpOffset, index + 1, false);
+    shpView.setInt32(shpOffset + 4, contentBytes / 2, false);
+    shxView.setInt32(shxOffset, recordOffsetWords, false);
+    shxView.setInt32(shxOffset + 4, contentBytes / 2, false);
+    let cursor = shpOffset + 8;
+    shpView.setInt32(cursor, 5, true); cursor += 4;
+    writeBounds(shpView, cursor, record.bounds); cursor += 32;
+    shpView.setInt32(cursor, record.rings.length, true); cursor += 4;
+    shpView.setInt32(cursor, record.points.length, true); cursor += 4;
+    let pointOffset = 0;
+    for (const ring of record.rings) {
+      shpView.setInt32(cursor, pointOffset, true); cursor += 4;
+      pointOffset += ring.length;
+    }
+    for (const [x, y] of record.points) {
+      shpView.setFloat64(cursor, x, true); cursor += 8;
+      shpView.setFloat64(cursor, y, true); cursor += 8;
+    }
+    shpOffset += 8 + contentBytes;
+    shxOffset += 8;
+    recordOffsetWords += (8 + contentBytes) / 2;
+  });
+
+  const fields = [...new Set(features.flatMap((feature) => Object.keys(feature.properties || {})))];
+  const fieldWidth = 254;
+  const recordWidth = 1 + fields.length * fieldWidth;
+  const headerLength = 32 + fields.length * 32 + 1;
+  const dbf = new Uint8Array(headerLength + recordWidth * features.length + 1);
+  const dbfView = new DataView(dbf.buffer);
+  dbfView.setUint8(0, 0x03);
+  const now = new Date();
+  dbfView.setUint8(1, now.getFullYear() - 1900);
+  dbfView.setUint8(2, now.getMonth() + 1);
+  dbfView.setUint8(3, now.getDate());
+  dbfView.setUint32(4, features.length, true);
+  dbfView.setUint16(8, headerLength, true);
+  dbfView.setUint16(10, recordWidth, true);
+  fields.forEach((field, index) => {
+    const name = encoder.encode(field.slice(0, 10));
+    const offset = 32 + index * 32;
+    dbf.set(name.subarray(0, 10), offset);
+    dbfView.setUint8(offset + 11, 0x43);
+    dbfView.setUint8(offset + 16, fieldWidth);
+  });
+  dbfView.setUint8(headerLength - 1, 0x0d);
+  features.forEach((feature, rowIndex) => {
+    const rowOffset = headerLength + rowIndex * recordWidth;
+    dbfView.setUint8(rowOffset, 0x20);
+    fields.forEach((field, fieldIndex) => {
+      const raw = feature.properties[field] ?? "";
+      const text = typeof raw === "object" ? JSON.stringify(raw) : String(raw);
+      const bytes = encoder.encode(text).subarray(0, fieldWidth);
+      dbf.set(bytes, rowOffset + 1 + fieldIndex * fieldWidth);
+    });
+  });
+  dbfView.setUint8(dbf.length - 1, 0x1a);
+  return { shp, shx, dbf };
+}
+
+function writeShapeHeader(bytes, fileSize, bounds) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  view.setInt32(0, 9994, false);
+  view.setInt32(24, fileSize / 2, false);
+  view.setInt32(28, 1000, true);
+  view.setInt32(32, 5, true);
+  writeBounds(view, 36, bounds);
+}
+
+function writeBounds(view, offset, bounds) {
+  view.setFloat64(offset, bounds.minX, true);
+  view.setFloat64(offset + 8, bounds.minY, true);
+  view.setFloat64(offset + 16, bounds.maxX, true);
+  view.setFloat64(offset + 24, bounds.maxY, true);
 }
